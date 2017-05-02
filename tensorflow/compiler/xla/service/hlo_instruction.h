@@ -34,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/service/name_uniquer.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
@@ -488,7 +489,10 @@ class HloInstruction {
   string SignatureString() const;
 
   // Returns a debugging string that represents this instruction.
-  string ToString(bool compact_operands = false) const;
+  string ToString(bool compact_operands = false,
+                  bool include_metadata = true) const;
+
+  string ToStringNoMetadata() const { return ToString(false, false); }
 
   // As ToString, but returns a shorter string.
   string ToShortString() const;
@@ -497,7 +501,9 @@ class HloInstruction {
   // or "elementwise".
   string ToCategory() const;
 
-  // Returns the string concatenation of parent name and this instructions name.
+  // Returns the string concatenation of parent name and this instructions
+  // name. This name is guaranteed to be unique among all instructions in the
+  // HloModule.
   string FullyQualifiedName() const;
 
   // Returns a logging instruction, if the output of this instruction is logged.
@@ -721,8 +727,9 @@ class HloInstruction {
   // this instruction.
   const string& name() const { return name_; }
 
-  // Sets the string identifier for this instruction.
-  void set_name(const string& name) { name_ = name; }
+  // Use the given NameUniquer to select a unique name for the instruction based
+  // on the instruction's existing name.
+  void UniquifyName(NameUniquer* name_uniquer);
 
   // Sets the debug metadata for this instruction.
   void set_metadata(const OpMetadata& metadata) { metadata_ = metadata; }

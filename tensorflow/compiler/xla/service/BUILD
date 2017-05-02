@@ -195,7 +195,6 @@ cc_library(
     deps = [
         ":hlo",
         "//tensorflow/compiler/xla:status_macros",
-        "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:util",
         "//tensorflow/core:lib",
     ],
@@ -624,6 +623,7 @@ cc_library(
         "buffer_liveness.h",
     ],
     deps = [
+        ":call_graph",
         ":hlo",
         ":hlo_ordering",
         ":liveness_util",
@@ -747,6 +747,7 @@ cc_library(
         "hlo_ordering.h",
     ],
     deps = [
+        ":call_graph",
         ":heap_simulator",
         ":hlo",
         ":logical_buffer",
@@ -858,7 +859,9 @@ cc_library(
         ":hlo_pass",
         "//tensorflow/compiler/xla:literal_util",
         "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
         "//tensorflow/compiler/xla:util",
+        "//tensorflow/core:lib",
     ],
 )
 
@@ -1254,6 +1257,7 @@ cc_library(
         ":hlo_cost_analysis",
         ":hlo_dce",
         ":hlo_ordering",
+        ":liveness_util",
         ":logical_buffer",
         ":tuple_points_to_analysis",
         "//tensorflow/compiler/xla:shape_util",
@@ -1271,6 +1275,7 @@ cc_test(
     deps = [
         ":cpu_plugin",
         ":hlo",
+        ":hlo_matchers",
         ":hlo_ordering",
         ":hlo_rematerialization",
         "//tensorflow/compiler/xla:shape_util",
@@ -1384,6 +1389,7 @@ cc_test(
         ":cpu_plugin",
         ":hlo",
         ":hlo_cse",
+        ":hlo_matchers",
         "//tensorflow/compiler/xla:literal_util",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:types",
