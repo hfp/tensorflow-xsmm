@@ -131,32 +131,7 @@ class libxsmm_dnn_conv_desc_wrap {
 
 struct HashFunction {
   std::size_t operator()(const libxsmm_dnn_conv_desc_wrap& w) const {
-    // unsigned char ptr[sizeof(&w.d)];
-
-    // memcpy(ptr, (unsigned char *)&w.d, sizeof(&w.d))
-
-    //
-    /*
-    std::ostringstream N,C,H,W,K,R,S,u,v,padh,padw;
-
-    N << w.d.N; C << w.d.C;
-    H << w.d.H; W << w.d.W;
-    K << w.d.K; R << w.d.R;
-    S << w.d.S; u << w.d.u;
-    v << w.d.v; padh << w.d.pad_h_in;
-    padw << w.d.pad_w_in;
- 
- 
-    std::string out_ =   N.str() + C.str()\
-                       + H.str() + W.str()\
-                       + K.str() + R.str()\
-                       + S.str() + u.str()\
-                       + v.str() + padh.str()\
-                       + padw.str();
-    //
-    //
-    */
-    return (std::hash<unsigned long long>()((unsigned long long)&(w.d)));
+    return libxsmm_hash(&w.d, sizeof(w.d), 25071975);
   }
 };
 
