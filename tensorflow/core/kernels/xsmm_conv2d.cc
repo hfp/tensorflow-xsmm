@@ -27,7 +27,6 @@ void dummy_xsmm_conv2d_ensure_file_is_not_empty(void);
 
 #include <stdlib.h>
 #include <cstring>
-#include <mutex>
 #if 0
 #include <omp.h>
 #endif
@@ -139,7 +138,6 @@ struct HashFunction {
 class handles {
  public:
   libxsmm_dnn_layer* find(const libxsmm_dnn_conv_desc_wrap& w) {
-    std::unique_lock<std::mutex> lock(mutex_);
     std::unordered_map<libxsmm_dnn_conv_desc_wrap, libxsmm_dnn_layer*,
                        HashFunction>::iterator i = libxsmm_handles.find(w);
     if (i == libxsmm_handles.end()) {
@@ -165,7 +163,6 @@ class handles {
   std::unordered_map<libxsmm_dnn_conv_desc_wrap, libxsmm_dnn_layer*,
                      HashFunction>
       libxsmm_handles;
-  std::mutex mutex_;
 };
 
 static handles libxsmm_handles;
