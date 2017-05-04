@@ -199,8 +199,6 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
 
   status = libxsmm_dnn_get_codegen_success(libxsmm_handle, kind);
   if (status == LIBXSMM_DNN_WARN_FALLBACK) {
-    chk_libxsmm_err(libxsmm_dnn_destroy_conv_layer(libxsmm_handle),
-                    "Destroy handle");
     return false;  // Use non-libxsmm code
   }
   chk_libxsmm_err(status, "Check codegen status");
