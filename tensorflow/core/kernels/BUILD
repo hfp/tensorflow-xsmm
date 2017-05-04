@@ -2042,6 +2042,7 @@ tf_kernel_library(
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core/platform/default/build_config:cublas_plugin",
         "@local_config_cuda//cuda:cusolver",
     ],
 )
@@ -2108,7 +2109,9 @@ tf_kernel_library(
 tf_kernel_library(
     name = "matrix_triangular_solve_op",
     prefix = "matrix_triangular_solve_op",
-    deps = LINALG_DEPS,
+    deps = LINALG_DEPS + if_cuda([
+        "//tensorflow/core/platform/default/build_config:cublas_plugin",
+    ]),
 )
 
 tf_kernel_library(
@@ -2322,7 +2325,9 @@ tf_kernel_library(
     prefix = "fft_ops",
     deps = MATH_DEPS + [
         "//tensorflow/core:spectral_ops_op_lib",
-    ],
+    ] + if_cuda([
+        "//tensorflow/core/platform/default/build_config:cufft_plugin",
+    ]),
 )
 
 tf_kernel_library(
@@ -2347,6 +2352,8 @@ tf_kernel_library(
         "//conditions:default": [],
     }) + if_mkl([
         "//third_party/mkl:intel_binary_blob",
+    ]) + if_cuda([
+        "//tensorflow/core/platform/default/build_config:cublas_plugin",
     ]),
 )
 
@@ -2626,7 +2633,10 @@ tf_kernel_library(
             "@libxsmm_archive//:xsmm_avx",
         ],
         "//conditions:default": [],
-    }),
+    }) + if_cuda([
+        "//tensorflow/core/platform/default/build_config:cublas_plugin",
+        "//tensorflow/core/platform/default/build_config:cudnn_plugin",
+    ]),
 )
 
 tf_kernel_library(

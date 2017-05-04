@@ -379,7 +379,12 @@ def multi_label_head(n_classes,
                      loss_fn=None):
   """Creates a Head for multi label classification.
 
-  The Head uses sigmoid cross entropy loss.
+  Multi-label classification handles the case where each example may have zero
+  or more associated labels, from a discrete set.  This is distinct from
+  `multi_class_head` which has exactly one label from a discrete set.
+
+  This head by default uses sigmoid cross entropy loss, which expects as input
+  a multi-hot tensor of shape `(batch_size, num_classes)`.
 
   Args:
     n_classes: Integer, number of classes, must be >= 2
@@ -921,12 +926,21 @@ def _softmax_cross_entropy_loss(labels, logits, weights=None):
     if not labels.dtype.is_integer:
       raise ValueError("Labels dtype should be integer "
                        "Instead got %s." % labels.dtype)
-    # TODO(ptucker): This will break for dynamic shapes.
+
     # sparse_softmax_cross_entropy_with_logits requires [batch_size] labels.
+    is_squeezed_labels = False
+    # TODO(ptucker): This will break for dynamic shapes.
     if len(labels.get_shape()) == 2:
       labels = array_ops.squeeze(labels, squeeze_dims=(1,))
+      is_squeezed_labels = True
+
     loss = nn.sparse_softmax_cross_entropy_with_logits(
         labels=labels, logits=logits, name=name)
+
+    # Restore squeezed dimension, if necessary, so loss matches weights shape.
+    if is_squeezed_labels:
+      loss = array_ops.expand_dims(loss, axis=(1,))
+
     return _compute_weighted_loss(loss, weights)
 
 

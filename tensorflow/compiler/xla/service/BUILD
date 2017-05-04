@@ -664,8 +664,8 @@ cc_library(
     ],
     deps = [
         ":buffer_liveness",
-        ":heap_simulator",
         ":hlo",
+        ":hlo_ordering",
         ":logical_buffer",
         ":tuple_points_to_analysis",
         "//tensorflow/compiler/xla:shape_util",
@@ -705,51 +705,38 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "heap_simulator",
-    srcs = [
-        "heap_simulator.cc",
-    ],
-    hdrs = [
-        "heap_simulator.h",
-    ],
-    deps = [
-        ":hlo",
-        ":liveness_util",
-        ":logical_buffer",
-        ":tuple_points_to_analysis",
-        "//tensorflow/compiler/xla:statusor",
-        "//tensorflow/compiler/xla:util",
-        "//tensorflow/core:lib",
-    ],
-)
-
 cc_test(
     name = "heap_simulator_test",
     srcs = ["heap_simulator_test.cc"],
     deps = [
-        ":heap_simulator",
         ":hlo",
+        ":hlo_ordering",
         ":logical_buffer",
         ":tuple_points_to_analysis",
+        "//tensorflow/compiler/xla:literal_util",
         "//tensorflow/compiler/xla:status_macros",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/core:lib",
         "//tensorflow/core:test_main",
     ],
 )
 
+# The hlo_ordering library contains both hlo_ordering and heap_simulator because
+# they are mutually dependent.
 cc_library(
     name = "hlo_ordering",
     srcs = [
+        "heap_simulator.cc",
         "hlo_ordering.cc",
     ],
     hdrs = [
+        "heap_simulator.h",
         "hlo_ordering.h",
     ],
     deps = [
         ":call_graph",
-        ":heap_simulator",
         ":hlo",
+        ":liveness_util",
         ":logical_buffer",
         ":tuple_points_to_analysis",
         "//tensorflow/compiler/xla:shape_util",
@@ -1415,6 +1402,28 @@ cc_library(
         "//tensorflow/compiler/xla:types",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
+    ],
+)
+
+cc_test(
+    name = "hlo_constant_folding_test",
+    srcs = ["hlo_constant_folding_test.cc"],
+    deps = [
+        ":cpu_plugin",
+        ":hlo",
+        ":hlo_constant_folding",
+        ":hlo_matchers",
+        ":hlo_pass",
+        "//tensorflow/compiler/xla:literal_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:types",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test_main",
     ],
 )
 
