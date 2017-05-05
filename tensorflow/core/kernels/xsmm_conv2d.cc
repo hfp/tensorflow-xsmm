@@ -123,9 +123,13 @@ class libxsmm_dnn_conv_desc_wrap {
 
   libxsmm_dnn_conv_desc_wrap(const libxsmm_dnn_conv_desc& d_) : d(d_) {}
   bool operator==(const libxsmm_dnn_conv_desc_wrap& w) const {
+#if 0
     return (d.N == w.d.N && d.C == w.d.C && d.H == w.d.H && d.W == w.d.W &&
             d.K == w.d.K && d.R == w.d.R && d.S == w.d.S && d.u == w.d.u &&
             d.v == w.d.v && d.pad_h == w.d.pad_h && d.pad_w == w.d.pad_w);
+#else
+    return 0 == memcmp(&d, &w, sizeof(libxsmm_dnn_conv_desc));
+#endif
   }
 };
 
