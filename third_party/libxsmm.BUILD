@@ -11,18 +11,8 @@ exports_files(["LICENSE"])
 libxsmm_interface_arguments = "0 1"
 
 # Arguments to ./scripts/libxsmm_config.py, see that file for detailed description.
-#  ilp64: 0 (no)
-#  big: 1 (yes)
-#  offload: 0 (no)
-#  alignment [b]
-#  prefetch: -1 (auto)
-#  threshold: 0 (auto)
-#  synchronize: yes
-#  jit: 1 (yes)
-#  flags: 0 (none)
-#  alpha = 1
-#  beta = 1
-libxsmm_config_arguments = "0 1 0 64 -1 0 1 1 0 1 1"
+# rely on default arguments
+libxsmm_config_arguments = ""
 
 # Arguments to ./scripts/libxsmm_dispatch.py, see that file for detailed description.
 #  (dummy argument)
