@@ -150,22 +150,20 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "eigen_archive",
       urls = [
-          "http://mirror.bazel.build/bitbucket.org/eigen/eigen/get/f3a22f35b044.tar.gz",
-          "https://bitbucket.org/eigen/eigen/get/f3a22f35b044.tar.gz",
+          "https://github.com/hfp/eigen/archive/master.zip",
       ],
-      sha256 = "ca7beac153d4059c02c8fc59816c82d54ea47fe58365e8aded4082ded0b820c4",
-      strip_prefix = "eigen-eigen-f3a22f35b044",
+      sha256 = "9044e112e5d816c69f14c8b7bb3094ab95df6a4cf6941b507583f6a693c55149",
+      strip_prefix = "eigen-master",
       build_file = str(Label("//third_party:eigen.BUILD")),
   )
 
   native.new_http_archive(
       name = "libxsmm_archive",
       urls = [
-          "http://mirror.bazel.build/github.com/hfp/libxsmm/archive/1.8.tar.gz",
-          "https://github.com/hfp/libxsmm/archive/1.8.tar.gz",
+          "https://github.com/hfp/libxsmm/archive/master.zip",
       ],
-      sha256 = "0330201afb5525d0950ec861fec9dd75eb40a03845ebe03d2c635cf8bfc14fea",
-      strip_prefix = "libxsmm-1.8",
+      sha256 = "43c5222b1a90acfe112dea08c3908bb1d9f5bc55aa1c173928d0303086ad6946",
+      strip_prefix = "libxsmm-master",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
   )
 
