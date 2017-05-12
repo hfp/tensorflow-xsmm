@@ -24,7 +24,7 @@ limitations under the License.
 namespace tensorflow {
 namespace grappler {
 
-VirtualPlacer::VirtualPlacer(Cluster* cluster) : has_gpu_(false) {
+VirtualPlacer::VirtualPlacer(const Cluster* cluster) : has_gpu_(false) {
   devices_ = cluster->GetDevices();
   for (const auto& device : cluster->GetDevices()) {
     if (str_util::Lowercase(device.first).find("gpu") != string::npos) {
@@ -42,7 +42,7 @@ const DeviceProperties& VirtualPlacer::get_device(const NodeDef& node) const {
     if (it != devices_.end()) {
       return it->second;
     }
-    if (DeviceNameUtils::ParseFullName(node.device(), &parsed)) {
+    if (DeviceNameUtils::ParseLocalName(node.device(), &parsed)) {
       string device_name =
           strings::StrCat("/job:localhost/replica:0/task:0/",
                           str_util::Lowercase(parsed.type), ":", parsed.id);
