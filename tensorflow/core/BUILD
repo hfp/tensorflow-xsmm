@@ -1522,6 +1522,10 @@ tf_cuda_library(
     srcs = [
         "common_runtime/shape_refiner.cc",
         "common_runtime/shape_refiner.h",
+        "common_runtime/optimization_registry.h",
+        "common_runtime/device_mgr.h",
+        "common_runtime/device_set.h",
+        "common_runtime/function.h",
         "framework/versions.h",
         "graph/algorithm.cc",
         "graph/colors.cc",
