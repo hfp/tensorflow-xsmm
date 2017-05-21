@@ -82,6 +82,9 @@ cc_library(
         "include/libxsmm_sync.h",
         "include/libxsmm_timer.h",
         "include/libxsmm_typedefs.h",
+        # Source files #included internally:
+        "src/libxsmm_gemm_diff.c",
+        "src/libxsmm_hash.c",
         # Generated:
         "include/libxsmm.h",
         "include/libxsmm_config.h",
