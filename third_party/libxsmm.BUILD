@@ -56,6 +56,8 @@ cc_library(
         "src/libxsmm_dnn_convolution_winograd_weight_update.c",
         "src/libxsmm_dnn_handle.c",
         "src/libxsmm_dump.c",
+        "src/libxsmm_ext_gemm.c",
+        "src/libxsmm_ext_trans.c",
         "src/libxsmm_fsspmdm.c",
         "src/libxsmm_gemm.c",
         "src/libxsmm_main.c",
@@ -82,11 +84,15 @@ cc_library(
         "include/libxsmm_sync.h",
         "include/libxsmm_timer.h",
         "include/libxsmm_typedefs.h",
+        # Source files #included internally:
+        "src/libxsmm_gemm_diff.c",
+        "src/libxsmm_hash.c",
         # Generated:
         "include/libxsmm.h",
         "include/libxsmm_config.h",
         "include/libxsmm_dispatch.h",
-    ] + glob([ # trigger rebuild if template changed
+    ] + glob([
+        # trigger rebuild if template changed
         "src/template/*.c",
     ]),
     copts = [
