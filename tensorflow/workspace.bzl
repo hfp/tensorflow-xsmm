@@ -162,7 +162,7 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       urls = [
           "https://github.com/hfp/libxsmm/archive/master.zip",
       ],
-      sha256 = "7d4de78896da087d969c993affbbb64a57b6705f8ffaeb29fe97a1ef9b12c1b6",
+      sha256 = "b75a4aa84b3e4a47e441bdda177cf980f528259b6dc965d95941212ee497e631",
       strip_prefix = "libxsmm-master",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
   )
