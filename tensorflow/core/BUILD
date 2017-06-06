@@ -1898,7 +1898,6 @@ cc_library(
         ":framework",
         ":lib",
         ":lib_internal",
-        ":test",
     ],
 )
 
@@ -1913,7 +1912,7 @@ cc_library(
     deps = [
         ":lib",
         ":lib_internal",
-        ":test",
+        ":test",  # buildcleaner: keep
         "//tensorflow/core/platform/default/build_config:test_main",
     ],
     alwayslink = 1,
@@ -2886,6 +2885,20 @@ filegroup(
         "lib/gif/testdata/optimized.gif",
         # BMP data
         "lib/bmp/testdata/lena.bmp",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "lmdb_testdata",
+    testonly = 1,
+    srcs = [
+        # A simple key-value store:
+        #   0 : 'a'
+        #   1 : 'b'
+        #    ...
+        #   9 : 'j'
+        "lib/lmdb/testdata/data.mdb",
     ],
     visibility = ["//visibility:public"],
 )

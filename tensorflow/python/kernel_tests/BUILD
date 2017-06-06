@@ -947,7 +947,7 @@ cuda_py_test(
     tags = ["notsan"],
 )
 
-tf_py_test(
+cuda_py_test(
     name = "diag_op_test",
     size = "medium",
     srcs = ["diag_op_test.py"],
@@ -979,6 +979,7 @@ tf_py_test(
         "//tensorflow/python:util",
         "//tensorflow/python:variables",
     ],
+    data = ["//tensorflow/core:lmdb_testdata"],
 )
 
 cuda_py_test(
