@@ -11,19 +11,11 @@ popd > /dev/null
 PLATFORM="$(uname -s | tr 'A-Z' 'a-z')"
 
 function is_linux() {
-  if [[ "${PLATFORM}" == "linux" ]]; then
-    true
-  else
-    false
-  fi
+  [[ "${PLATFORM}" == "linux" ]]
 }
 
 function is_macos() {
-  if [[ "${PLATFORM}" == "darwin" ]]; then
-    true
-  else
-    false
-  fi
+  [[ "${PLATFORM}" == "darwin" ]]
 }
 
 function is_windows() {
@@ -99,9 +91,7 @@ function setup_python {
 
   if [ -z "$PYTHON_LIB_PATH" ]; then
     # Split python_path into an array of paths, this allows path containing spaces
-    IFS=','
-    python_lib_path=($(python_path))
-    unset IFS
+    IFS=',' read -r -a python_lib_path <<< "$(python_path)"
 
     if [ 1 = "$USE_DEFAULT_PYTHON_LIB_PATH" ]; then
       PYTHON_LIB_PATH=${python_lib_path[0]}
@@ -596,7 +586,7 @@ while true; do
     CUDA_DNN_LIB_ALT_PATH="libcudnn${TF_CUDNN_EXT}.dylib"
   fi
 
-  if [ -e "$CUDNN_INSTALL_PATH/${CUDA_DNN_LIB_ALT_PATH}" -o -e "$CUDNN_INSTALL_PATH/${CUDA_DNN_LIB_PATH}" ]; then
+  if [ -e "$CUDNN_INSTALL_PATH/${CUDA_DNN_LIB_ALT_PATH}" ] || [ -e "$CUDNN_INSTALL_PATH/${CUDA_DNN_LIB_PATH}" ]; then
     export TF_CUDNN_VERSION
     write_action_env_to_bazelrc "TF_CUDNN_VERSION" "$TF_CUDNN_VERSION"
     export CUDNN_INSTALL_PATH
@@ -687,6 +677,12 @@ if is_windows; then
   write_action_env_to_bazelrc "CUDA_PATH" "$CUDA_PATH"
   write_action_env_to_bazelrc "CUDA_COMPUTE_CAPABILITIES" "$CUDA_COMPUTE_CAPABILITIES"
   write_action_env_to_bazelrc "NO_WHOLE_ARCHIVE_OPTION" "1"
+  write_to_bazelrc "build --config=win-cuda"
+  write_to_bazelrc "test --config=win-cuda"
+else
+  # If CUDA is enabled, always use GPU during build and test.
+  write_to_bazelrc "build --config=cuda"
+  write_to_bazelrc "test --config=cuda"
 fi
 
 # end of if "$TF_NEED_CUDA" == "1"
@@ -813,7 +809,7 @@ while true; do
     fi
 
     #Check that the include and library folders are where we expect them to be
-    if [ -e "$MPI_HOME/include" -a -e "$MPI_HOME/lib" ]; then
+    if [ -e "$MPI_HOME/include" ] && [ -e "$MPI_HOME/lib" ]; then
         break
     fi
  

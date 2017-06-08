@@ -71,6 +71,12 @@ config_setting(
 
 config_setting(
     name = "windows",
+    values = {"cpu": "x64_windows"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "windows_msvc",
     values = {"cpu": "x64_windows_msvc"},
     visibility = ["//visibility:public"],
 )
@@ -245,6 +251,7 @@ filegroup(
         "//tensorflow/contrib/data/python/framework:all_files",
         "//tensorflow/contrib/data/python/kernel_tests:all_files",
         "//tensorflow/contrib/data/python/ops:all_files",
+        "//tensorflow/contrib/data/python/util:all_files",
         "//tensorflow/contrib/distributions:all_files",
         "//tensorflow/contrib/factorization:all_files",
         "//tensorflow/contrib/factorization/kernels:all_files",
@@ -369,6 +376,8 @@ filegroup(
         "//tensorflow/tensorboard/components/tf_graph_controls/demo:all_files",
         "//tensorflow/tensorboard/components/tf_graph_dashboard:all_files",
         "//tensorflow/tensorboard/components/tf_graph_dashboard/demo:all_files",
+        "//tensorflow/tensorboard/components/tf_graph_debugger_data_card:all_files",
+        "//tensorflow/tensorboard/components/tf_graph_debugger_data_card/demo:all_files",
         "//tensorflow/tensorboard/components/tf_graph_info:all_files",
         "//tensorflow/tensorboard/components/tf_graph_info/demo:all_files",
         "//tensorflow/tensorboard/components/tf_graph_loader:all_files",
@@ -455,6 +464,7 @@ cc_binary(
             "//tensorflow/c:exported_symbols.lds",
         ],
         "//tensorflow:windows": [],
+        "//tensorflow:windows_msvc": [],
         "//conditions:default": [
             "-z defs",
             "-s",
