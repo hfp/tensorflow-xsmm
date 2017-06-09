@@ -3,6 +3,8 @@
 set -e
 set -o pipefail
 
+MIN_BAZEL_VERSION=0.4.5
+
 # Find out the absolute path to where ./configure resides
 pushd `dirname $0` > /dev/null
 SOURCE_BASE_DIR=`pwd -P`
@@ -103,7 +105,7 @@ function setup_python {
         echo "  $x"
       done
       set -- "${python_lib_path[@]}"
-      echo "Please input the desired Python library path to use.  Default is ["$1"]"
+      echo "Please input the desired Python library path to use.  Default is [$1]"
       read b || true
       if [ "$b" == "" ]; then
         PYTHON_LIB_PATH=${python_lib_path[0]}
@@ -119,7 +121,8 @@ function setup_python {
     exit 1
   fi
 
-  local python_major_version=$("${PYTHON_BIN_PATH}" -c 'from __future__ import print_function; import sys; print(sys.version_info[0]);' | head -c1)
+  local python_major_version
+  python_major_version=$("${PYTHON_BIN_PATH}" -c 'from __future__ import print_function; import sys; print(sys.version_info[0]);' | head -c1)
   if [ -z "$python_major_version" ]; then
     echo -e "\n\nERROR: Problem getting python version.  Is $PYTHON_BIN_PATH the correct python binary?"
     exit 1
@@ -149,6 +152,22 @@ function setup_python {
   # Write tools/python_bin_path.sh
   echo "export PYTHON_BIN_PATH=\"$PYTHON_BIN_PATH\"" > tools/python_bin_path.sh
 }
+
+function version {
+  echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }';
+}
+
+
+bazel version > bazel.version
+curr_bazel_version=$(head -n 1 bazel.version | cut -d ' ' -f3)
+rm -f bazel.version
+
+echo "You have bazel $curr_bazel_version installed."
+if [ "$(version "$MIN_BAZEL_VERSION")" -gt "$(version "$curr_bazel_version")" ]; then
+  echo "Please upgrade your bazel installation to version $MIN_BAZEL_VERSION or higher to build TensorFlow!"
+  echo "Exiting..."
+  exit 1
+fi
 
 # This file contains customized config settings.
 rm -f .tf_configure.bazelrc
@@ -603,7 +622,8 @@ while true; do
     CUDNN_PATH_FROM_LDCONFIG="$($LDCONFIG_BIN -p | sed -n 's/.*libcudnn.so .* => \(.*\)/\1/p')"
     if [ -e "${CUDNN_PATH_FROM_LDCONFIG}${TF_CUDNN_EXT}" ]; then
       export TF_CUDNN_VERSION
-      export CUDNN_INSTALL_PATH="$(dirname ${CUDNN_PATH_FROM_LDCONFIG})"
+      export CUDNN_INSTALL_PATH
+      CUDNN_INSTALL_PATH="$(dirname ${CUDNN_PATH_FROM_LDCONFIG})"
       write_action_env_to_bazelrc "CUDNN_INSTALL_PATH" "$CUDNN_INSTALL_PATH"
       break
     fi
