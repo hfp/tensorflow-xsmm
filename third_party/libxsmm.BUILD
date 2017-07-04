@@ -45,6 +45,8 @@ genrule(
 
 cc_library(
     name = "xsmm_avx",
+    srcs = glob([
+        # general source files (translation units)
     srcs = [
         "src/libxsmm_cpuid_x86.c",
         "src/libxsmm_dnn.c",
@@ -70,31 +72,25 @@ cc_library(
         "src/libxsmm_trans.c",
     ] + glob([
         "src/generator_*.c",
+        "src/libxsmm_*.c",
+    ], exclude=[
+        # exclude generators (with main functions)
+        "src/libxsmm_generator_*.c",
     ]),
-    hdrs = [
-        "include/libxsmm_cpuid.h",
-        "include/libxsmm_dnn.h",
-        "include/libxsmm_frontend.h",
-        "include/libxsmm_fsspmdm.h",
-        "include/libxsmm_generator.h",
-        "include/libxsmm_intrinsics_x86.h",
-        "include/libxsmm_macros.h",
-        "include/libxsmm_malloc.h",
-        "include/libxsmm_spmdm.h",
-        "include/libxsmm_sync.h",
-        "include/libxsmm_timer.h",
-        "include/libxsmm_typedefs.h",
-        # Source files #included internally:
+    hdrs = glob([
+        # general header files
+        "include/libxsmm_*.h",
+        # trigger rebuild if template changed
+        "src/template/*.c",
+    ]) + [
+        # source files included internally
         "src/libxsmm_gemm_diff.c",
         "src/libxsmm_hash.c",
-        # Generated:
+        # generated header files
         "include/libxsmm.h",
         "include/libxsmm_config.h",
         "include/libxsmm_dispatch.h",
-    ] + glob([
-        # trigger rebuild if template changed
-        "src/template/*.c",
-    ]),
+    ],
     copts = [
         "-mavx",  # JIT does not work without avx anyway, and this silences some CRC32 warnings.
         "-Wno-vla",  # Libxsmm convolutions heavily use VLA.
