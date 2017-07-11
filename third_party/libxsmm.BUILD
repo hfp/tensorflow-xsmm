@@ -47,30 +47,6 @@ cc_library(
     name = "xsmm_avx",
     srcs = glob([
         # general source files (translation units)
-    srcs = [
-        "src/libxsmm_cpuid_x86.c",
-        "src/libxsmm_dnn.c",
-        "src/libxsmm_dnn_convolution_backward.c",
-        "src/libxsmm_dnn_convolution_forward.c",
-        "src/libxsmm_dnn_convolution_weight_update.c",
-        "src/libxsmm_dnn_convolution_winograd_backward.c",
-        "src/libxsmm_dnn_convolution_winograd_forward.c",
-        "src/libxsmm_dnn_convolution_winograd_weight_update.c",
-        "src/libxsmm_dnn_handle.c",
-        "src/libxsmm_dump.c",
-        "src/libxsmm_ext_gemm.c",
-        "src/libxsmm_ext_trans.c",
-        "src/libxsmm_fsspmdm.c",
-        "src/libxsmm_gemm.c",
-        "src/libxsmm_main.c",
-        "src/libxsmm_malloc.c",
-        "src/libxsmm_perf.c",
-        "src/libxsmm_spmdm.c",
-        "src/libxsmm_sync.c",
-        "src/libxsmm_timer.c",
-        "src/libxsmm_trace.c",
-        "src/libxsmm_trans.c",
-    ] + glob([
         "src/generator_*.c",
         "src/libxsmm_*.c",
     ], exclude=[
