@@ -3,9 +3,12 @@
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
 load("//third_party/sycl:sycl_configure.bzl", "sycl_configure")
 load("//third_party/mkl:build_defs.bzl", "mkl_repository")
-load("@io_bazel_rules_closure//closure/private:java_import_external.bzl", "java_import_external")
+load("@io_bazel_rules_closure//closure/private:java_import_external.bzl",
+     "java_import_external")
 load("@io_bazel_rules_closure//closure:defs.bzl", "filegroup_external")
 load("//third_party/py:python_configure.bzl", "python_configure")
+load("//third_party/toolchains/cpus/arm:arm_compiler_configure.bzl",
+     "arm_compiler_configure")
 
 
 def _is_windows(repository_ctx):
@@ -83,7 +86,6 @@ temp_workaround_http_archive = repository_rule(
     },
 )
 
-
 # Executes specified command with arguments and calls 'fail' if it exited with
 # non-zero code
 def _execute_and_check_ret_code(repo_ctx, cmd_and_args):
@@ -142,6 +144,12 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   sycl_configure(name="local_config_sycl")
   python_configure(name="local_config_python")
 
+  # Point //external/local_config_arm_compiler to //external/arm_compiler
+  arm_compiler_configure(
+      name="local_config_arm_compiler",
+      remote_config_repo="../arm_compiler",
+      build_file = str(Label("//third_party/toolchains/cpus/arm:BUILD")))
+
   mkl_repository(
       name = "mkl",
       urls = [
@@ -166,6 +174,17 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       sha256 = "cc0adc1a035ecf67e361be53719e5d4a28d2838db1ffdc85809d5138a8180f71",
       strip_prefix = "eigen-master",
       build_file = str(Label("//third_party:eigen.BUILD")),
+  )
+
+  native.new_http_archive(
+    name = "arm_compiler",
+    build_file = str(Label("//:arm_compiler.BUILD")),
+    sha256 = "970285762565c7890c6c087d262b0a18286e7d0384f13a37786d8521773bc969",
+    strip_prefix = "tools-0e906ebc527eab1cdbf7adabff5b474da9562e9f/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf",
+    urls = [
+        "http://mirror.bazel.build/github.com/raspberrypi/tools/archive/0e906ebc527eab1cdbf7adabff5b474da9562e9f.tar.gz",
+        "https://github.com/raspberrypi/tools/archive/0e906ebc527eab1cdbf7adabff5b474da9562e9f.tar.gz",
+    ],
   )
 
   native.new_local_repository(
