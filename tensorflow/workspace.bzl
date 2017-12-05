@@ -92,7 +92,7 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
      strip_prefix = "abseil-cpp-cc4bed2d74f7c8717e31f9579214ab52a9c9c610",
   )
 
-  tf_http_archive(
+  native.new_http_archive(
       name = "eigen_archive",
       urls = [
           "https://github.com/hfp/eigen/archive/master.zip",
@@ -115,7 +115,7 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       build_file = str(Label("//:arm_compiler.BUILD")),
   )
 
-  tf_local_repository(
+  native.new_local_repository(
       name = "libxsmm_archive",
       path = "../libxsmm",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
