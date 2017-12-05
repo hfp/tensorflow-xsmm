@@ -1016,7 +1016,7 @@ filegroup(
 cc_library(
     name = "android_tensorflow_lib_lite",
     srcs = if_android(["//tensorflow/core:android_srcs"]),
-    copts = tf_copts() + if_not_android_mips_and_mips64(["-Os"]),
+    copts = tf_copts(android_optimization_level_override = None),
     linkopts = ["-lz"],
     tags = [
         "manual",
@@ -1106,8 +1106,7 @@ cc_library(
 cc_library(
     name = "android_tensorflow_lib_selective_registration",
     srcs = if_android(["//tensorflow/core:android_srcs"]),
-    copts = tf_copts() + [
-        "-Os",
+    copts = tf_copts(android_optimization_level_override = None) + [
         "-DSUPPORT_SELECTIVE_REGISTRATION",
     ],
     tags = [
@@ -1129,8 +1128,7 @@ cc_library(
 cc_library(
     name = "android_tensorflow_lib_selective_registration_nortti",
     srcs = if_android(["//tensorflow/core:android_srcs"]),
-    copts = tf_copts() + tf_opts_nortti_if_android() + [
-        "-Os",
+    copts = tf_copts(android_optimization_level_override = None) + tf_opts_nortti_if_android() + [
         "-DSUPPORT_SELECTIVE_REGISTRATION",
     ],
     tags = [
@@ -1210,7 +1208,7 @@ cc_library(
         "framework/tensor_testutil.h",
         "util/reporter.h",
     ],
-    copts = tf_copts() + ["-Os"],
+    copts = tf_copts(android_optimization_level_override = None),
     tags = [
         "manual",
         "notap",
@@ -1856,17 +1854,26 @@ cc_library(
     ],
 )
 
+tf_cuda_library(
+    name = "cuda_device_functions",
+    hdrs = ["util/cuda_device_functions.h"],
+    visibility = ["//visibility:public"],
+    deps = [":framework_lite"],
+)
+
 # TODO(josh11b): Is this needed, or can we just use ":protos_all_cc"?
 cc_library(
     name = "protos_cc",
     deps = ["//tensorflow/core/platform/default/build_config:protos_cc"],
 )
 
-CORE_CPU_BASE_HDRS = [
-    "common_runtime/device.h",
-    "common_runtime/graph_runner.h",
-    "common_runtime/shape_refiner.h",
-    "framework/versions.h",
+# Library containing all of the graph construction code that is
+# independent of the runtime.
+#
+# TODO(mrry): Refactor graph_constructor.cc so that it does not depend on code
+# in "common_runtime/", and then the entire "graph/" directory can be included
+# in this library.
+GRAPH_HDRS = [
     "graph/algorithm.h",
     "graph/colors.h",
     "graph/control_flow.h",
@@ -1874,7 +1881,7 @@ CORE_CPU_BASE_HDRS = [
     "graph/default_device.h",
     "graph/edgeset.h",
     "graph/graph.h",
-    "graph/graph_constructor.h",
+    "graph/graph_constructor.h",  # NOTE(mrry): Don't include the .cc since it depends on common_runtime.
     "graph/graph_def_builder.h",
     "graph/graph_partition.h",
     "graph/mkl_layout_pass.h",
@@ -1890,20 +1897,12 @@ CORE_CPU_BASE_HDRS = [
 ]
 
 tf_cuda_library(
-    name = "core_cpu_base",
+    name = "graph",
     srcs = [
-        "common_runtime/shape_refiner.cc",
-        "common_runtime/shape_refiner.h",
-        "common_runtime/optimization_registry.h",
-        "common_runtime/device_mgr.h",
-        "common_runtime/device_set.h",
-        "common_runtime/function.h",
-        "framework/versions.h",
         "graph/algorithm.cc",
         "graph/colors.cc",
         "graph/control_flow.cc",
         "graph/costmodel.cc",
-        "graph/graph_constructor.cc",
         "graph/graph_def_builder.cc",
         "graph/graph_partition.cc",
         "graph/node_builder.cc",
@@ -1911,6 +1910,33 @@ tf_cuda_library(
         "graph/subgraph.cc",
         "graph/tensor_id.cc",
         "graph/validate.cc",
+    ],
+    hdrs = GRAPH_HDRS,
+    deps = [
+        ":framework",
+        ":framework_internal",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
+        ":protos_all_cc",
+        "//third_party/eigen3",
+    ],
+)
+
+CORE_CPU_BASE_HDRS = GRAPH_HDRS + [
+    "common_runtime/device.h",
+    "common_runtime/graph_runner.h",
+    "common_runtime/shape_refiner.h",
+    "framework/versions.h",
+]
+
+tf_cuda_library(
+    name = "core_cpu_base",
+    srcs = [
+        "common_runtime/shape_refiner.cc",
+        "common_runtime/shape_refiner.h",
+        "framework/versions.h",
+        "graph/graph_constructor.cc",  # Depends on common_runtime.
         "public/session.h",
         "public/session_options.h",
         "public/version.h",
@@ -1918,6 +1944,7 @@ tf_cuda_library(
     hdrs = CORE_CPU_BASE_HDRS,
     copts = tf_copts(),
     deps = [
+        ":graph",
         ":framework",
         ":framework_internal",
         ":lib",
@@ -2021,6 +2048,7 @@ tf_cuda_library(
     hdrs = CORE_CPU_LIB_HEADERS,
     copts = tf_copts(),
     deps = [
+        ":graph",
         ":framework",
         ":framework_internal",
         ":lib",
@@ -2062,6 +2090,7 @@ tf_cuda_library(
         ":function_ops_op_lib",
         ":functional_grad",
         ":functional_ops_op_lib",
+        ":graph",
         ":lib",
         ":lib_internal",
         ":proto_text",
@@ -2107,6 +2136,7 @@ tf_cuda_library(
         ":core_cpu_internal",
         ":device_tracer",
         ":framework",
+        ":graph",
         ":lib",
         ":lib_internal",
         ":proto_text",
@@ -2189,6 +2219,7 @@ tf_cuda_library(
         ":framework_internal",
         ":gpu_init_impl",
         ":gpu_lib",
+        ":graph",
         ":lib",
         ":lib_internal",
         ":protos_all_cc",
