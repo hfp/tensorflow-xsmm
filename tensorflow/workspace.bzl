@@ -74,11 +74,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "mkl_dnn",
       urls = [
-          "https://mirror.bazel.build/github.com/01org/mkl-dnn/archive/b01e3a55a07be62172e713bcd2644c5176360212.tar.gz",
-          "https://github.com/01org/mkl-dnn/archive/b01e3a55a07be62172e713bcd2644c5176360212.tar.gz",
+          "https://mirror.bazel.build/github.com/01org/mkl-dnn/archive/aab753280e83137ba955f8f19d72cb6aaba545ef.tar.gz",
+          "https://github.com/01org/mkl-dnn/archive/aab753280e83137ba955f8f19d72cb6aaba545ef.tar.gz",
       ],
-      sha256 = "0d529ad4c49dc799e6df07c2b88b115d0668735da15fb3b3862d28d33fa68165",
-      strip_prefix = "mkl-dnn-b01e3a55a07be62172e713bcd2644c5176360212",
+      sha256 = "fb67f255a96bd4ad39b8dd104eca5aa92200c95c1ed36e59641e6c0478eefd11",
+      strip_prefix = "mkl-dnn-aab753280e83137ba955f8f19d72cb6aaba545ef",
       build_file = str(Label("//third_party/mkl_dnn:mkldnn.BUILD")),
   )
 
@@ -246,11 +246,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "absl_py",
       urls = [
-          "https://mirror.bazel.build/github.com/abseil/abseil-py/archive/231e3870b976c1dc61dce1749138661d21556028.tar.gz",
-          "https://github.com/abseil/abseil-py/archive/231e3870b976c1dc61dce1749138661d21556028.tar.gz",
+          "https://mirror.bazel.build/github.com/abseil/abseil-py/archive/acec853355ef987eae48a8d87a79351c15dff593.tar.gz",
+          "https://github.com/abseil/abseil-py/archive/acec853355ef987eae48a8d87a79351c15dff593.tar.gz",
       ],
-      sha256 = "8ea2b23bfdb9ae7622f3e5d95236bc600c8d8509a2f38c84732b3145585d4f73",
-      strip_prefix = "abseil-py-231e3870b976c1dc61dce1749138661d21556028",
+      sha256 = "29e4584e778bee13aa4093824133d131d927cc160561892880118d9ff7b95a6a",
+      strip_prefix = "abseil-py-acec853355ef987eae48a8d87a79351c15dff593",
   )
 
   tf_http_archive(
@@ -616,11 +616,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "bazel_toolchains",
       urls = [
-          "https://mirror.bazel.build/github.com/bazelbuild/bazel-toolchains/archive/af4681c3d19f063f090222ec3d04108c4e0ca255.tar.gz",
-          "https://github.com/bazelbuild/bazel-toolchains/archive/af4681c3d19f063f090222ec3d04108c4e0ca255.tar.gz",
+          "https://mirror.bazel.build/github.com/bazelbuild/bazel-toolchains/archive/b49ba3689f46ac50e9277dafd8ff32b26951f82e.tar.gz",
+          "https://github.com/bazelbuild/bazel-toolchains/archive/b49ba3689f46ac50e9277dafd8ff32b26951f82e.tar.gz",
       ],
-      sha256 = "d58bb2d6c8603f600d522b6104d6192a65339aa26cbba9f11ff5c4b36dedb928",
-      strip_prefix = "bazel-toolchains-af4681c3d19f063f090222ec3d04108c4e0ca255",
+      sha256 = "1266f1e27b4363c83222f1a776397c7a069fbfd6aacc9559afa61cdd73e1b429",
+      strip_prefix = "bazel-toolchains-b49ba3689f46ac50e9277dafd8ff32b26951f82e",
   )
 
   tf_http_archive(
@@ -645,15 +645,6 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       build_file = str(Label("//third_party/flatbuffers:flatbuffers.BUILD")),
   )
 
-  tf_http_archive(
-      name = "double_conversion",
-      urls = [
-          "https://mirror.bazel.build/github.com/google/double-conversion/archive/5664746c5e64dc265e7fbc1a890a6698e6ad0ebb.tar.gz",
-          "https://github.com/google/double-conversion/archive/5664746c5e64dc265e7fbc1a890a6698e6ad0ebb.tar.gz",
-      ],
-      sha256 = "ce651ba63faa55f86333f50bdd58a574327ca1565a65b875b11f5132c7c72bb6",
-      strip_prefix = "double-conversion-5664746c5e64dc265e7fbc1a890a6698e6ad0ebb",
-  )
 
   tf_http_archive(
       name = "tflite_mobilenet",

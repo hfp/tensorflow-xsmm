@@ -217,6 +217,7 @@ if (tensorflow_BUILD_PYTHON_TESTS)
       # TFDBG grpc:// mode is not yet available on Windows.
       "${tensorflow_source_dir}/tensorflow/python/debug/lib/dist_session_debug_grpc_test.py"
       "${tensorflow_source_dir}/tensorflow/python/debug/lib/session_debug_grpc_test.py"
+      "${tensorflow_source_dir}/tensorflow/python/debug/lib/source_remote_test.py"
       # stl on windows handles overflows different
       "${tensorflow_source_dir}/tensorflow/python/kernel_tests/as_string_op_test.py"
       "${tensorflow_source_dir}/tensorflow/python/kernel_tests/string_to_number_op_test.py"
@@ -298,6 +299,9 @@ if (tensorflow_BUILD_PYTHON_TESTS)
       # Test should only be run manually
       "${tensorflow_source_dir}/tensorflow/python/kernel_tests/reduction_ops_test_big.py"
       "${tensorflow_source_dir}/tensorflow/python/kernel_tests/svd_op_test.py"
+      # Depends on python/framework/test_ops
+      "${tensorflow_source_dir}/tensorflow/python/kernel_tests/array_ops_test.py"
+      "${tensorflow_source_dir}/tensorflow/python/kernel_tests/control_flow_util_test.py"
   )
   endif()
   list(REMOVE_ITEM tf_test_src_py ${tf_test_src_py_exclude})
