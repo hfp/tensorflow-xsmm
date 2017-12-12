@@ -183,7 +183,7 @@ public:
 
       LIBXSMM_LOCK_ACQUIRE(LIBXSMM_LOCK_RWLOCK, &lock);
       i = container.find(regkey); 
-      if (i != container.end()) { // re-check after lock acquisition
+      if (i == container.end()) { // re-check after lock acquisition
         regentry.handle = libxsmm_dnn_create_conv_layer(regkey.descriptor, &status);
         if (LIBXSMM_DNN_WARN_FALLBACK != status) {
           CHECK_LIBXSMM_DNN(status, "create handle");
