@@ -419,8 +419,8 @@ Shape MergeDimensions(tensorflow::gtl::ArraySlice<size_t> segs,
             (segs.size() == i ? shape.dimensions().size() : segs[i]),
         1, std::multiplies<int64>()));
   }
-  return ShapeUtil::MakeShapeWithMonotonicDim0MajorLayout(shape.element_type(),
-                                                          dimensions);
+  return ShapeUtil::MakeShapeWithDescendingLayout(shape.element_type(),
+                                                  dimensions);
 }
 
 // Returns whether the given shapes and permutation are a 0-2-1 transpose, and
@@ -433,20 +433,22 @@ std::tuple<bool, Shape, Shape> IsTranspose021(const Shape& a, const Shape& b) {
   CHECK(ShapeUtil::Compatible(a, b));
   std::vector<int64> perm(a.dimensions().size());
   {
-    std::vector<int64> layout_a(a.layout().minor_to_major().rbegin(),
-                                a.layout().minor_to_major().rend());
-    std::vector<int64> layout_b(b.layout().minor_to_major().rbegin(),
-                                b.layout().minor_to_major().rend());
+    auto layout_a_orig = LayoutUtil::MinorToMajor(a);
+    std::vector<int64> layout_a(layout_a_orig.rbegin(), layout_a_orig.rend());
+    auto layout_b_orig = LayoutUtil::MinorToMajor(b);
+    std::vector<int64> layout_b(layout_b_orig.rbegin(), layout_b_orig.rend());
     for (size_t i = 0; i < perm.size(); ++i) {
       perm[i] = PositionInContainer(layout_b, layout_a[i]);
     }
   }
   auto segs = ConsecutiveSegments(perm);
-  Shape norm_a = ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(a);
-  Shape norm_b = ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(b);
+  Shape norm_a =
+      ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(a);
+  Shape norm_b =
+      ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(b);
   if (3 == segs.size() && 0 == perm[0]) {
     Shape reduced_a = MergeDimensions(segs, norm_a);
-    Shape reduced_b = ShapeUtil::MakeShapeWithMonotonicDim0MajorLayout(
+    Shape reduced_b = ShapeUtil::MakeShapeWithDescendingLayout(
         b.element_type(),
         Permute({0, 2, 1}, AsInt64Slice(reduced_a.dimensions())));
     return std::make_tuple(true, reduced_a, reduced_b);
@@ -460,10 +462,11 @@ std::tuple<bool, Shape, Shape> IsTranspose021(const Shape& a, const Shape& b) {
 bool AreShapesForTranspose021(const Shape& a, const Shape& b) {
   return 3 == b.dimensions().size() &&
          ShapeUtil::Compatible(
-             ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(a),
+             ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(a),
              ShapeUtil::PermuteDimensions(
                  {0, 2, 1},
-                 ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(b)));
+                 ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
+                     b)));
 }
 
 // Emits a tiled 0-2-1 transpose, assuming both input and output lain out from
@@ -495,9 +498,11 @@ int64 EmitTranspose021Tiled(llvm_ir::IrArray input, llvm_ir::IrArray output,
   CHECK(AreShapesForTranspose021(input.GetShape(), output.GetShape()));
 
   Shape input_shape =
-      ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(input.GetShape());
+      ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
+          input.GetShape());
   Shape output_shape =
-      ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(output.GetShape());
+      ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
+          output.GetShape());
   input = input.CastToShape(input_shape, builder);
   output = output.CastToShape(output_shape, builder);
 
@@ -615,7 +620,7 @@ int64 EmitTranspose021Tiled(llvm_ir::IrArray input, llvm_ir::IrArray output,
                   llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_x, {}, {},
                   builder))),
           builder->getInt64Ty(), /*isSigned=*/true, "block.id.x"),
-      ShapeUtil::MakeShapeWithMonotonicDim0MajorLayout(
+      ShapeUtil::MakeShapeWithDescendingLayout(
           PRED /*arbitrary*/, AsInt64Slice(input_dims_in_tiles)),
       builder);
   const llvm_ir::IrArray::Index input_tile_origin = ({
@@ -811,14 +816,15 @@ Status IrEmitterUnnested::EmitColumnReduction(
         // input_shape to normalized_input_shape and a reshape from
         // normalized_input_shape to input_matrix_shape.
         const Shape normalized_input_shape =
-            ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(input_shape);
+            ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
+                input_shape);
+        auto input_shape_min2maj = LayoutUtil::MinorToMajor(input_shape);
         const std::vector<int64> transpose_dimension_mapping(
-            input_shape.layout().minor_to_major().rbegin(),
-            input_shape.layout().minor_to_major().rend());
+            input_shape_min2maj.rbegin(), input_shape_min2maj.rend());
 
         const Shape input_matrix_shape =
-            ShapeUtil::MakeShapeWithMonotonicDim0MajorLayout(
-                input_shape.element_type(), {height, width});
+            ShapeUtil::MakeShapeWithDescendingLayout(input_shape.element_type(),
+                                                     {height, width});
         const llvm_ir::IrArray::Index input_matrix_index(
             {y, x}, input_matrix_shape, &ir_builder_);
         const llvm_ir::IrArray::Index input_index =
@@ -1054,13 +1060,14 @@ Status IrEmitterUnnested::EmitRowReduction(
         // from input_shape to normalized_input_shape and a reshape from
         // normalized_input_shape to input_3d_tensor_shape.
         const Shape normalized_input_shape =
-            ShapeUtil::NormalizeShapeToMonotonicDim0MajorLayout(input_shape);
+            ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
+                input_shape);
+        auto input_shape_min2maj = LayoutUtil::MinorToMajor(input_shape);
         const std::vector<int64> transpose_dimension_mapping(
-            input_shape.layout().minor_to_major().rbegin(),
-            input_shape.layout().minor_to_major().rend());
+            input_shape_min2maj.rbegin(), input_shape_min2maj.rend());
         const Shape input_3d_tensor_shape =
-            ShapeUtil::MakeShapeWithMonotonicDim0MajorLayout(
-                input_shape.element_type(), {depth, height, width});
+            ShapeUtil::MakeShapeWithDescendingLayout(input_shape.element_type(),
+                                                     {depth, height, width});
         const llvm_ir::IrArray::Index input_3d_tensor_index(
             {z, y, x}, input_3d_tensor_shape, &ir_builder_);
         const llvm_ir::IrArray::Index input_index =
@@ -1189,9 +1196,9 @@ Status IrEmitterUnnested::EmitReductionToVector(
   // whether another dimension is major or minor of them.
   std::sort(input_dims_to_keep.begin(), input_dims_to_keep.end(),
             [&input_shape](int64 dim_a, int64 dim_b) {
-              return PositionInContainer(input_shape.layout().minor_to_major(),
+              return PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                                          dim_a) <
-                     PositionInContainer(input_shape.layout().minor_to_major(),
+                     PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                                          dim_b);
             });
   // Now, if output rank is at least 1, `input_dims_to_keep.front()` is
@@ -1236,14 +1243,14 @@ Status IrEmitterUnnested::EmitReductionToVector(
     int64 width = 1;
     for (int64 input_dim = 0; input_dim < ShapeUtil::Rank(input_shape);
          ++input_dim) {
-      if (PositionInContainer(input_shape.layout().minor_to_major(),
+      if (PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                               input_dim) >
-          PositionInContainer(input_shape.layout().minor_to_major(),
+          PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                               input_dims_to_keep.back())) {
         depth *= input_shape.dimensions(input_dim);
-      } else if (PositionInContainer(input_shape.layout().minor_to_major(),
+      } else if (PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                                      input_dim) <
-                 PositionInContainer(input_shape.layout().minor_to_major(),
+                 PositionInContainer(LayoutUtil::MinorToMajor(input_shape),
                                      input_dims_to_keep.front())) {
         width *= input_shape.dimensions(input_dim);
       }

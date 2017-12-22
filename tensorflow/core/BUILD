@@ -1848,6 +1848,13 @@ cc_library(
     ],
 )
 
+tf_cuda_library(
+    name = "cuda_device_functions",
+    hdrs = ["util/cuda_device_functions.h"],
+    visibility = ["//visibility:public"],
+    deps = [":framework_lite"],
+)
+
 # TODO(josh11b): Is this needed, or can we just use ":protos_all_cc"?
 cc_library(
     name = "protos_cc",
@@ -2173,6 +2180,8 @@ GPU_RUNTIME_HEADERS = [
     "common_runtime/gpu/gpu_cudamalloc_allocator.h",
     "common_runtime/gpu/gpu_debug_allocator.h",
     "common_runtime/gpu/gpu_device.h",
+    "common_runtime/gpu/gpu_id.h",
+    "common_runtime/gpu/gpu_id_utils.h",
     "common_runtime/gpu/gpu_init.h",
     "common_runtime/gpu/gpu_managed_allocator.h",
     "common_runtime/gpu/gpu_stream_util.h",
@@ -2190,6 +2199,7 @@ tf_cuda_library(
         "common_runtime/gpu/gpu_debug_allocator.cc",
         "common_runtime/gpu/gpu_device.cc",
         "common_runtime/gpu/gpu_device_factory.cc",
+        "common_runtime/gpu/gpu_id_utils.cc",
         "common_runtime/gpu/gpu_managed_allocator.cc",
         "common_runtime/gpu/gpu_stream_util.cc",
         "common_runtime/gpu/gpu_util.cc",
@@ -2801,6 +2811,8 @@ tf_cc_tests_gpu(
     size = "small",
     srcs = glob(["user_ops/**/*_test.cc"]) + [
         "common_runtime/gpu/gpu_bfc_allocator_test.cc",
+        "common_runtime/gpu/gpu_device_test.cc",
+        "common_runtime/gpu/gpu_id_utils_test.cc",
         "common_runtime/gpu/gpu_event_mgr_test.cc",
         "common_runtime/gpu/pool_allocator_test.cc",
     ],
