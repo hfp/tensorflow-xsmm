@@ -26,7 +26,7 @@ import textwrap
 
 import gast
 
-from tensorflow.contrib.py2tf.pyct import copier
+from tensorflow.contrib.py2tf.pyct import ast_util
 from tensorflow.contrib.py2tf.pyct import parser
 from tensorflow.contrib.py2tf.pyct import qual_names
 
@@ -59,7 +59,7 @@ class ReplaceTransformer(gast.NodeTransformer):
       repl = self.replacements[node.name]
       if not isinstance(repl, (gast.Name, ast.Name)):
         raise ValueError(
-            'A function name can only be replaced by a Name node. Found: %s',
+            'A function name can only be replaced by a Name node. Found: %s' %
             repl)
       node.name = repl.id
     return node
@@ -70,6 +70,8 @@ class ReplaceTransformer(gast.NodeTransformer):
       node.ctx = gast.Load()
     elif isinstance(node, gast.Name):
       node.ctx = ctx
+    elif isinstance(node, (gast.Str, gast.Num)):
+      pass
     else:
       raise ValueError('unexpected node type "%s"' % node)
 
@@ -77,7 +79,7 @@ class ReplaceTransformer(gast.NodeTransformer):
     if node.id not in self.replacements:
       return node
 
-    new_nodes = copier.copy_clean(self.replacements[node.id])
+    new_nodes = ast_util.copy_clean(self.replacements[node.id])
     if isinstance(new_nodes, gast.AST):
       new_nodes = [new_nodes]
 
