@@ -123,7 +123,7 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       urls = [
           "https://github.com/hfp/eigen/archive/master.zip",
       ],
-      sha256 = "08f0738ff7636765d312c0a302ba870d224a00a04ea67d6792386c7f550d4099",
+      sha256 = "a4466d7168bf2b1603bdebd1ef6c5dfb5d59246e74a5e925d7a46610692ca2bf",
       strip_prefix = "eigen-master",
       build_file = str(Label("//third_party:eigen.BUILD")),
       patch_file = str(Label("//third_party:eigen_fix_cuda_compilation.patch"))
