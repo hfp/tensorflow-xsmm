@@ -250,7 +250,11 @@ def reset_tf_configure_bazelrc(workspace_path):
       if _TF_BAZELRC_FILENAME in l:
         continue
       f.write('%s\n' % l)
-    f.write('import %s\n' % _TF_BAZELRC)
+    if is_windows():
+      tf_bazelrc_path = _TF_BAZELRC.replace("\\", "/")
+    else:
+      tf_bazelrc_path = _TF_BAZELRC
+    f.write('import %s\n' % tf_bazelrc_path)
 
 
 def cleanup_makefile():
@@ -444,7 +448,7 @@ def check_bazel_version(min_version):
   if which('bazel') is None:
     print('Cannot find bazel. Please install bazel.')
     sys.exit(0)
-  curr_version = run_shell(['bazel', '--batch', 'version'])
+  curr_version = run_shell(['bazel', '--batch', '--bazelrc=/dev/null', 'version'])
 
   for line in curr_version.split('\n'):
     if 'Build label: ' in line:
@@ -1067,7 +1071,7 @@ def set_tf_tensorrt_install_path(environ_cp):
           break
 
     # Reset and Retry
-    if len(possible_files):
+    if possible_files:
       print('TensorRT libraries found in one the following directories',
             'are not compatible with selected cuda and cudnn installations')
       print(trt_install_path)
@@ -1076,7 +1080,8 @@ def set_tf_tensorrt_install_path(environ_cp):
       if search_result:
         print(libnvinfer_path_from_ldconfig)
     else:
-      print('Invalid path to TensorRT. None of the following files can be found:')
+      print(
+          'Invalid path to TensorRT. None of the following files can be found:')
       print(trt_install_path)
       print(os.path.join(trt_install_path, 'lib'))
       print(os.path.join(trt_install_path, 'lib64'))
