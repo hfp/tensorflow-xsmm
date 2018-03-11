@@ -149,6 +149,7 @@ cc_library(
         "common.h",
         "optimized/depthwiseconv_float.h",
         "optimized/depthwiseconv_uint8.h",
+        "optimized/depthwiseconv_uint8_3x3_filter.h",
         "optimized/optimized_ops.h",
     ],
     copts = tflite_copts(),
@@ -212,7 +213,10 @@ cc_library(
         "compatibility.h",
         "quantization_util.h",
     ],
-    deps = [":round"],
+    deps = [
+        ":round",
+        ":types",
+    ],
 )
 
 cc_test(
@@ -306,6 +310,27 @@ cc_library(
     deps = [
         ":tensor_utils",
         "//tensorflow/contrib/lite:builtin_op_data",
+    ],
+)
+
+# Audio support classes imported directly from TensorFlow.
+cc_library(
+    name = "audio_utils",
+    srcs = [
+        "mfcc.cc",
+        "mfcc_dct.cc",
+        "mfcc_mel_filterbank.cc",
+        "spectrogram.cc",
+    ],
+    hdrs = [
+        "mfcc.h",
+        "mfcc_dct.h",
+        "mfcc_mel_filterbank.h",
+        "spectrogram.h",
+    ],
+    deps = [
+        "//third_party/fft2d:fft2d_headers",
+        "@fft2d",
     ],
 )
 
