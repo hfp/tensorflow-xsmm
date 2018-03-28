@@ -2788,6 +2788,9 @@ class Graph(object):
     # being called inside function definitions behave as if they were seeing the
     # actual outside graph).
     self._graph_key = "grap-key-%d/" % (uid(),)
+    # A string with the last reduction method passed to
+    # losses.compute_weighted_loss(), or None.
+    self._last_loss_reduction = None
     self._container = ""
     self._registered_ops = op_def_registry.get_registered_ops()
 
@@ -5863,6 +5866,9 @@ def strip_name_scope(name, export_scope):
     is None.
   """
   if export_scope:
+    if export_scope[-1] == "/":
+      export_scope = export_scope[:-1]
+
     try:
       # Strips export_scope/, export_scope///,
       # ^export_scope/, loc:@export_scope/.
@@ -5888,6 +5894,9 @@ def prepend_name_scope(name, import_scope):
     is None.
   """
   if import_scope:
+    if import_scope[-1] == "/":
+      import_scope = import_scope[:-1]
+
     try:
       str_to_replace = r"([\^]|loc:@|^)(.*)"
       return re.sub(str_to_replace, r"\1" + import_scope + r"/\2",

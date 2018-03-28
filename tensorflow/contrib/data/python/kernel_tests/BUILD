@@ -294,9 +294,7 @@ py_test(
         "//tensorflow/python:errors",
         "//tensorflow/python:framework_ops",
         "//tensorflow/python:lib",
-        "//tensorflow/python:math_ops",
         "//tensorflow/python:parsing_ops",
-        "//tensorflow/python:string_ops",
         "//tensorflow/python:util",
         "//tensorflow/python/data/ops:iterator_ops",
         "//third_party/py/numpy",
@@ -479,6 +477,11 @@ py_test(
     size = "small",
     srcs = ["prefetching_ops_test.py"],
     srcs_version = "PY2AND3",
+    tags = [
+        "manual",
+        "no_oss",
+        "notap",
+    ],
     deps = [
         "//tensorflow/contrib/data/python/ops:prefetching_ops",
         "//tensorflow/core:protos_all_py",

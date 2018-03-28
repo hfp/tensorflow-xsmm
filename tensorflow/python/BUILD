@@ -2884,9 +2884,11 @@ py_library(
         ":client",
         ":control_flow_ops",
         ":data_flow_ops",
+        ":device",
         ":errors",
         ":framework",
         ":framework_for_generated_wrappers",
+        ":framework_ops",
         ":gradients",
         ":init_ops",
         ":io_ops",
@@ -2911,6 +2913,8 @@ py_library(
         ":variable_scope",
         ":variables",
         "//tensorflow/python/eager:backprop",
+        "//tensorflow/python/eager:context",
+        "//tensorflow/python/ops/losses",
         "//third_party/py/numpy",
         "@six_archive//:six",
     ],
@@ -2937,6 +2941,18 @@ py_test(
     deps = [
         ":checkpointable",
         ":client_testlib",
+    ],
+)
+
+py_test(
+    name = "distribute_test",
+    size = "small",
+    srcs = ["training/distribute_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":client_testlib",
+        ":training",
+        ":variable_scope",
     ],
 )
 
