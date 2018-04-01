@@ -13,9 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_JIT_XLA_TENSOR_INFO_H_
-#define TENSORFLOW_COMPILER_JIT_XLA_TENSOR_INFO_H_
+#ifndef TENSORFLOW_COMPILER_JIT_XLA_TENSOR_H_
+#define TENSORFLOW_COMPILER_JIT_XLA_TENSOR_H_
 
+#include "tensorflow/compiler/xla/client/local_client.h"
 #include "tensorflow/compiler/xla/service/shaped_buffer.h"
 #include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/framework/device_base.h"
@@ -24,11 +25,32 @@ limitations under the License.
 
 namespace tensorflow {
 
-// Information about a tensor. The XlaTensorInfoManager can maintain one of
-// these per device Tensor.
-class XlaTensorInfo {
+// The implementation of a Tensor for an XlaDevice. All device tensors are
+// actually one of these.
+//
+// To distinguish between "normal" device tensors and XlaTensors, the raw
+// pointer data stored in the TensorBuffer is a tagged pointer.
+class XlaTensor {
  public:
-  XlaTensorInfo() {}
+  // Downcast from a Tensor to an XlaTensor. Return nullptr if the downcast
+  // fails.
+  static XlaTensor* FromTensor(Tensor* tensor);
+  // Downcast from a Tensor to an XlaTensor. Return nullptr if the downcast
+  // fails.
+  static const XlaTensor* FromTensor(const Tensor* tensor);
+
+  // Create a DeviceMemoryBase from a Tensor. The Tensor can be an XlaTensor, in
+  // which case the returned value is shaped_buffer()->root_buffer(), or a
+  // normal Tensor in which case the returned value is
+  // {tensor.tensor_data().data(), tensor.tensor_data().size}.
+  static perftools::gputools::DeviceMemoryBase DeviceMemoryFromTensor(
+      const Tensor& tensor);
+
+  // Assign the internal ShapedBuffer to new memory for the given dtype and
+  // shape. If a ShapedBuffer exists already (has_shaped_buffer() == true), it
+  // is replaced and the managed memory deallocated.
+  Status AllocateShapedBuffer(DataType dtype, const TensorShape& shape,
+                              xla::LocalClient* client, int device_ordinal);
 
   // Some Tensors can have complex on-device shapes, including tuple shapes. To
   // manage the memory for these tensors a ShapedBuffer may be required.
@@ -37,10 +59,14 @@ class XlaTensorInfo {
   bool has_shaped_buffer() const { return shaped_buffer_ != nullptr; }
   // Return the contained ShapedBuffer.
   // REQUIRES: has_shaped_buffer()
-  const xla::ShapedBuffer& shaped_buffer() const { return *shaped_buffer_; }
+  const xla::ShapedBuffer& shaped_buffer() const {
+    CHECK(has_shaped_buffer());
+    return *shaped_buffer_;
+  }
   // Mutates the TensorInfo to set the ShapedBuffer.
-  void set_shaped_buffer(xla::ShapedBuffer shaped_buffer) {
-    shaped_buffer_.reset(new xla::ShapedBuffer(std::move(shaped_buffer)));
+  void set_shaped_buffer(
+      std::unique_ptr<xla::ScopedShapedBuffer> shaped_buffer) {
+    shaped_buffer_ = std::move(shaped_buffer);
   }
 
   // Some tensors on the device may have known values on the host. We use these
@@ -57,45 +83,18 @@ class XlaTensorInfo {
     host_tensor_.reset(new Tensor(tensor));
   }
 
+  // Convert from a raw pointer to an XlaTensor, removing the pointer tag.
+  static XlaTensor* FromOpaquePointer(void* ptr);
+  // Convert to a raw pointer from an XlaTensor, adding the pointer tag.
+  static void* ToOpaquePointer(XlaTensor* tensor);
+
  private:
   // The optional contained ShapedBuffer.
-  std::unique_ptr<xla::ShapedBuffer> shaped_buffer_;
+  std::unique_ptr<xla::ScopedShapedBuffer> shaped_buffer_;
   // An optional host tensor value.
   std::unique_ptr<Tensor> host_tensor_;
 };
 
-// Manages XlaTensorInfo objects. This class is also an Allocator, so that
-// XlaTensorInfo objects can be deleted when their Tensor is deallocated.
-class XlaTensorInfoManager : public AllocatorWrapper {
- public:
-  // Creates a new XlaTensorInfoManager, delegating all DeallocateRaw calls to
-  // allocator.
-  XlaTensorInfoManager(Allocator* allocator) : AllocatorWrapper(allocator) {}
-
-  // Returns the XlaTensorInfo for the given device memory pointer or nullptr if
-  // none exists.
-  const XlaTensorInfo* GetTensorInfo(const void* device_ptr) const;
-  // Returns the XlaTensorInfo for the device memory pointer extracted from
-  // tensor or nullptr if none exists.
-  const XlaTensorInfo* GetTensorInfo(const Tensor& tensor);
-
-  // Returns the XlaTensorInfo for the given device memory pointer, creating one
-  // if necessary.
-  XlaTensorInfo* GetOrCreateTensorInfo(const Tensor& tensor);
-  // Returns the XlaTensorInfo for the device memory pointer extracted from
-  // tensor, creating one if necessary.
-  XlaTensorInfo* GetOrCreateTensorInfo(const void* device_ptr);
-
-  // Allocator interface
-  void DeallocateRaw(void* ptr) override;
-
- private:
-  mutable mutex lock_;
-  // The managed tensor infos. The mapped value is a unique_ptr so that returned
-  // references are stable over rehashes.
-  std::unordered_map<const void*, std::unique_ptr<XlaTensorInfo>> tensor_infos_
-      GUARDED_BY(lock_);
-};
 }  // namespace tensorflow
 
 #endif
