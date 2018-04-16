@@ -31,6 +31,10 @@ limitations under the License.
 
 #include "i_malloc.h"
 
+#if defined(TENSORFLOW_USE_LIBXSMM)
+# include <libxsmm.h>
+#endif
+
 namespace tensorflow {
 
 class MklSubAllocator : public SubAllocator {
@@ -55,7 +59,18 @@ class MklCPUAllocator : public VisitableAllocator {
   /// Default upper limit on allocator size - 64GB
   static constexpr size_t kDefaultMaxLimit = 64LL << 30;
 
-  MklCPUAllocator() { TF_CHECK_OK(Initialize()); }
+  MklCPUAllocator() {
+    TF_CHECK_OK(Initialize());
+#if defined(TENSORFLOW_USE_LIBXSMM)
+    libxsmm_init();
+    { libxsmm_malloc_function malloc_fn; libxsmm_free_function free_fn;
+      typedef libxsmm_tf_allocator<libxsmm_scratch_allocator> scratch_allocator;
+      malloc_fn.function = scratch_allocator::malloc;
+      free_fn.function = scratch_allocator::free;
+      libxsmm_set_scratch_allocator(0/*context*/, malloc_fn, free_fn);
+    }
+#endif
+  }
 
   ~MklCPUAllocator() override { delete allocator_; }
 
@@ -131,12 +146,20 @@ class MklCPUAllocator : public VisitableAllocator {
 
   static inline void* MallocHook(size_t size) {
     VLOG(3) << "MklCPUAllocator: In MallocHook";
+#if defined(TENSORFLOW_USE_LIBXSMM)
+    return libxsmm_aligned_scratch(size, kAlignment);
+#else
     return cpu_allocator()->AllocateRaw(kAlignment, size);
+#endif
   }
 
   static inline void FreeHook(void* ptr) {
     VLOG(3) << "MklCPUAllocator: In FreeHook";
+#if defined(TENSORFLOW_USE_LIBXSMM)
+    libxsmm_free(ptr);
+#else
     cpu_allocator()->DeallocateRaw(ptr);
+#endif
   }
 
   static inline void* CallocHook(size_t num, size_t size) {

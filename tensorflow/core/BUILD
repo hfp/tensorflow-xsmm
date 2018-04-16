@@ -2349,7 +2349,9 @@ tf_cuda_library(
         "public/version.h",
     ],
     hdrs = CORE_CPU_LIB_HEADERS,
-    copts = tf_copts(),
+    copts = tf_copts() + [
+        "-DTENSORFLOW_USE_LIBXSMM",
+    ],
     deps = [
         ":graph",
         ":framework",
@@ -2360,6 +2362,7 @@ tf_cuda_library(
         ":protos_all_cc",
         "//third_party/eigen3",
         "//tensorflow/core/grappler:grappler_item",
+        "@libxsmm_archive//:xsmm_avx",
     ] + if_mkl(
         [
             "//third_party/mkl:intel_binary_blob",
