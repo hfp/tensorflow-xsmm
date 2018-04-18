@@ -160,11 +160,12 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "gemmlowp",
       urls = [
-          "https://mirror.bazel.build/github.com/google/gemmlowp/archive/7c7c744640ddc3d0af18fb245b4d23228813a71b.zip",
-          "https://github.com/google/gemmlowp/archive/7c7c744640ddc3d0af18fb245b4d23228813a71b.zip",
+          # TODO (yongtang): uncomment once mirror.bazel.build is propagated.
+          # "https://mirror.bazel.build/github.com/google/gemmlowp/archive/38ebac7b059e84692f53e5938f97a9943c120d98.zip",
+          "https://github.com/google/gemmlowp/archive/38ebac7b059e84692f53e5938f97a9943c120d98.zip",
       ],
-      sha256 = "b852cc90259a7357c8a323f108f2cec6e85979fc3b18b5590b99e0130044b2cf",
-      strip_prefix = "gemmlowp-7c7c744640ddc3d0af18fb245b4d23228813a71b",
+      sha256 = "b87faa7294dfcc5d678f22a59d2c01ca94ea1e2a3b488c38a95a67889ed0a658",
+      strip_prefix = "gemmlowp-38ebac7b059e84692f53e5938f97a9943c120d98",
   )
 
   tf_http_archive(
@@ -420,11 +421,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "grpc",
       urls = [
-          "https://mirror.bazel.build/github.com/grpc/grpc/archive/09386db3939cae1ac12e5f09b735adfa8958c68e.tar.gz",
-          "https://github.com/grpc/grpc/archive/09386db3939cae1ac12e5f09b735adfa8958c68e.tar.gz",
+          "https://mirror.bazel.build/github.com/grpc/grpc/archive/d184fa229d75d336aedea0041bd59cb93e7e267f.tar.gz",
+          "https://github.com/grpc/grpc/archive/d184fa229d75d336aedea0041bd59cb93e7e267f.tar.gz",
       ],
-      sha256 = "b857969c667c14f37faa507afc07a3f39a47fbf73203be889d55925622e7b317",
-      strip_prefix = "grpc-09386db3939cae1ac12e5f09b735adfa8958c68e",
+      sha256 = "895b31310e718a61f7335759a778c068a6edde1c089883598a0830cbb7075673",
+      strip_prefix = "grpc-d184fa229d75d336aedea0041bd59cb93e7e267f",
   )
 
 
@@ -444,11 +445,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "llvm",
       urls = [
-          "https://mirror.bazel.build/github.com/llvm-mirror/llvm/archive/15535accd9e1e9d7772202ce51c8428c1994a04b.tar.gz",
-          "https://github.com/llvm-mirror/llvm/archive/15535accd9e1e9d7772202ce51c8428c1994a04b.tar.gz",
+          "https://mirror.bazel.build/github.com/llvm-mirror/llvm/archive/3210e64b499a31193051208f2f8922dadfc4bb6f.tar.gz",
+          "https://github.com/llvm-mirror/llvm/archive/3210e64b499a31193051208f2f8922dadfc4bb6f.tar.gz",
       ],
-      sha256 = "3470c2dde055dc974e859e707aa6cd1d22eadd4f3a1f282e74c3cf1f7dc9510a",
-      strip_prefix = "llvm-15535accd9e1e9d7772202ce51c8428c1994a04b",
+      sha256 = "017d7db029cc175634d75416c326770139c76590575ed44a3794c11ab160c955",
+      strip_prefix = "llvm-3210e64b499a31193051208f2f8922dadfc4bb6f",
       build_file = clean_dep("//third_party/llvm:llvm.BUILD"),
   )
 
@@ -744,6 +745,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.bind(
       name = "grpc_cpp_plugin",
       actual = "@grpc//:grpc_cpp_plugin",
+  )
+  native.bind(
+      name = "grpc_python_plugin",
+      actual = "@grpc//:grpc_python_plugin",
   )
 
   # gRPC has three empty C++ functions which it wants the user to define

@@ -35,6 +35,11 @@ limitations under the License.
 # include <libxsmm.h>
 #endif
 
+#ifdef _WIN32
+typedef unsigned int uint;
+#endif
+
+
 namespace tensorflow {
 
 class MklSubAllocator : public SubAllocator {
