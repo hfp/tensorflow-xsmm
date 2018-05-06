@@ -154,6 +154,9 @@ struct ArgMaxOptionsT;
 struct LessOptions;
 struct LessOptionsT;
 
+struct NegOptions;
+struct NegOptionsT;
+
 struct OperatorCode;
 struct OperatorCodeT;
 
@@ -221,6 +224,7 @@ enum BuiltinOperator {
   BuiltinOperator_DEPTHWISE_CONV_2D = 4,
   BuiltinOperator_DEQUANTIZE = 6,
   BuiltinOperator_EMBEDDING_LOOKUP = 7,
+  BuiltinOperator_FLOOR = 8,
   BuiltinOperator_FULLY_CONNECTED = 9,
   BuiltinOperator_HASHTABLE_LOOKUP = 10,
   BuiltinOperator_L2_NORMALIZATION = 11,
@@ -271,11 +275,12 @@ enum BuiltinOperator {
   BuiltinOperator_ARG_MAX = 56,
   BuiltinOperator_MINIMUM = 57,
   BuiltinOperator_LESS = 58,
+  BuiltinOperator_NEG = 59,
   BuiltinOperator_MIN = BuiltinOperator_ADD,
-  BuiltinOperator_MAX = BuiltinOperator_LESS
+  BuiltinOperator_MAX = BuiltinOperator_NEG
 };
 
-inline BuiltinOperator (&EnumValuesBuiltinOperator())[57] {
+inline BuiltinOperator (&EnumValuesBuiltinOperator())[59] {
   static BuiltinOperator values[] = {
     BuiltinOperator_ADD,
     BuiltinOperator_AVERAGE_POOL_2D,
@@ -284,6 +289,7 @@ inline BuiltinOperator (&EnumValuesBuiltinOperator())[57] {
     BuiltinOperator_DEPTHWISE_CONV_2D,
     BuiltinOperator_DEQUANTIZE,
     BuiltinOperator_EMBEDDING_LOOKUP,
+    BuiltinOperator_FLOOR,
     BuiltinOperator_FULLY_CONNECTED,
     BuiltinOperator_HASHTABLE_LOOKUP,
     BuiltinOperator_L2_NORMALIZATION,
@@ -333,7 +339,8 @@ inline BuiltinOperator (&EnumValuesBuiltinOperator())[57] {
     BuiltinOperator_MAXIMUM,
     BuiltinOperator_ARG_MAX,
     BuiltinOperator_MINIMUM,
-    BuiltinOperator_LESS
+    BuiltinOperator_LESS,
+    BuiltinOperator_NEG
   };
   return values;
 }
@@ -348,7 +355,7 @@ inline const char **EnumNamesBuiltinOperator() {
     "",
     "DEQUANTIZE",
     "EMBEDDING_LOOKUP",
-    "",
+    "FLOOR",
     "FULLY_CONNECTED",
     "HASHTABLE_LOOKUP",
     "L2_NORMALIZATION",
@@ -399,6 +406,7 @@ inline const char **EnumNamesBuiltinOperator() {
     "ARG_MAX",
     "MINIMUM",
     "LESS",
+    "NEG",
     nullptr
   };
   return names;
@@ -452,11 +460,12 @@ enum BuiltinOptions {
   BuiltinOptions_MaximumMinimumOptions = 39,
   BuiltinOptions_ArgMaxOptions = 40,
   BuiltinOptions_LessOptions = 41,
+  BuiltinOptions_NegOptions = 42,
   BuiltinOptions_MIN = BuiltinOptions_NONE,
-  BuiltinOptions_MAX = BuiltinOptions_LessOptions
+  BuiltinOptions_MAX = BuiltinOptions_NegOptions
 };
 
-inline BuiltinOptions (&EnumValuesBuiltinOptions())[42] {
+inline BuiltinOptions (&EnumValuesBuiltinOptions())[43] {
   static BuiltinOptions values[] = {
     BuiltinOptions_NONE,
     BuiltinOptions_Conv2DOptions,
@@ -499,7 +508,8 @@ inline BuiltinOptions (&EnumValuesBuiltinOptions())[42] {
     BuiltinOptions_DequantizeOptions,
     BuiltinOptions_MaximumMinimumOptions,
     BuiltinOptions_ArgMaxOptions,
-    BuiltinOptions_LessOptions
+    BuiltinOptions_LessOptions,
+    BuiltinOptions_NegOptions
   };
   return values;
 }
@@ -548,6 +558,7 @@ inline const char **EnumNamesBuiltinOptions() {
     "MaximumMinimumOptions",
     "ArgMaxOptions",
     "LessOptions",
+    "NegOptions",
     nullptr
   };
   return names;
@@ -724,6 +735,10 @@ template<> struct BuiltinOptionsTraits<ArgMaxOptions> {
 
 template<> struct BuiltinOptionsTraits<LessOptions> {
   static const BuiltinOptions enum_value = BuiltinOptions_LessOptions;
+};
+
+template<> struct BuiltinOptionsTraits<NegOptions> {
+  static const BuiltinOptions enum_value = BuiltinOptions_NegOptions;
 };
 
 struct BuiltinOptionsUnion {
@@ -1084,6 +1099,14 @@ struct BuiltinOptionsUnion {
   const LessOptionsT *AsLessOptions() const {
     return type == BuiltinOptions_LessOptions ?
       reinterpret_cast<const LessOptionsT *>(value) : nullptr;
+  }
+  NegOptionsT *AsNegOptions() {
+    return type == BuiltinOptions_NegOptions ?
+      reinterpret_cast<NegOptionsT *>(value) : nullptr;
+  }
+  const NegOptionsT *AsNegOptions() const {
+    return type == BuiltinOptions_NegOptions ?
+      reinterpret_cast<const NegOptionsT *>(value) : nullptr;
   }
 };
 
@@ -1485,8 +1508,8 @@ struct Conv2DOptionsT : public flatbuffers::NativeTable {
         stride_w(0),
         stride_h(0),
         fused_activation_function(ActivationFunctionType_NONE),
-        dilation_w_factor(0),
-        dilation_h_factor(0) {
+        dilation_w_factor(1),
+        dilation_h_factor(1) {
   }
 };
 
@@ -1513,10 +1536,10 @@ struct Conv2DOptions FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     return static_cast<ActivationFunctionType>(GetField<int8_t>(VT_FUSED_ACTIVATION_FUNCTION, 0));
   }
   int32_t dilation_w_factor() const {
-    return GetField<int32_t>(VT_DILATION_W_FACTOR, 0);
+    return GetField<int32_t>(VT_DILATION_W_FACTOR, 1);
   }
   int32_t dilation_h_factor() const {
-    return GetField<int32_t>(VT_DILATION_H_FACTOR, 0);
+    return GetField<int32_t>(VT_DILATION_H_FACTOR, 1);
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1549,10 +1572,10 @@ struct Conv2DOptionsBuilder {
     fbb_.AddElement<int8_t>(Conv2DOptions::VT_FUSED_ACTIVATION_FUNCTION, static_cast<int8_t>(fused_activation_function), 0);
   }
   void add_dilation_w_factor(int32_t dilation_w_factor) {
-    fbb_.AddElement<int32_t>(Conv2DOptions::VT_DILATION_W_FACTOR, dilation_w_factor, 0);
+    fbb_.AddElement<int32_t>(Conv2DOptions::VT_DILATION_W_FACTOR, dilation_w_factor, 1);
   }
   void add_dilation_h_factor(int32_t dilation_h_factor) {
-    fbb_.AddElement<int32_t>(Conv2DOptions::VT_DILATION_H_FACTOR, dilation_h_factor, 0);
+    fbb_.AddElement<int32_t>(Conv2DOptions::VT_DILATION_H_FACTOR, dilation_h_factor, 1);
   }
   explicit Conv2DOptionsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -1572,8 +1595,8 @@ inline flatbuffers::Offset<Conv2DOptions> CreateConv2DOptions(
     int32_t stride_w = 0,
     int32_t stride_h = 0,
     ActivationFunctionType fused_activation_function = ActivationFunctionType_NONE,
-    int32_t dilation_w_factor = 0,
-    int32_t dilation_h_factor = 0) {
+    int32_t dilation_w_factor = 1,
+    int32_t dilation_h_factor = 1) {
   Conv2DOptionsBuilder builder_(_fbb);
   builder_.add_dilation_h_factor(dilation_h_factor);
   builder_.add_dilation_w_factor(dilation_w_factor);
@@ -4012,6 +4035,46 @@ inline flatbuffers::Offset<LessOptions> CreateLessOptions(
 
 flatbuffers::Offset<LessOptions> CreateLessOptions(flatbuffers::FlatBufferBuilder &_fbb, const LessOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct NegOptionsT : public flatbuffers::NativeTable {
+  typedef NegOptions TableType;
+  NegOptionsT() {
+  }
+};
+
+struct NegOptions FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef NegOptionsT NativeTableType;
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           verifier.EndTable();
+  }
+  NegOptionsT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(NegOptionsT *_o, const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static flatbuffers::Offset<NegOptions> Pack(flatbuffers::FlatBufferBuilder &_fbb, const NegOptionsT* _o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct NegOptionsBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  explicit NegOptionsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  NegOptionsBuilder &operator=(const NegOptionsBuilder &);
+  flatbuffers::Offset<NegOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<NegOptions>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<NegOptions> CreateNegOptions(
+    flatbuffers::FlatBufferBuilder &_fbb) {
+  NegOptionsBuilder builder_(_fbb);
+  return builder_.Finish();
+}
+
+flatbuffers::Offset<NegOptions> CreateNegOptions(flatbuffers::FlatBufferBuilder &_fbb, const NegOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct OperatorCodeT : public flatbuffers::NativeTable {
   typedef OperatorCode TableType;
   BuiltinOperator builtin_code;
@@ -4252,6 +4315,9 @@ struct Operator FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const LessOptions *builtin_options_as_LessOptions() const {
     return builtin_options_type() == BuiltinOptions_LessOptions ? static_cast<const LessOptions *>(builtin_options()) : nullptr;
   }
+  const NegOptions *builtin_options_as_NegOptions() const {
+    return builtin_options_type() == BuiltinOptions_NegOptions ? static_cast<const NegOptions *>(builtin_options()) : nullptr;
+  }
   const flatbuffers::Vector<uint8_t> *custom_options() const {
     return GetPointer<const flatbuffers::Vector<uint8_t> *>(VT_CUSTOM_OPTIONS);
   }
@@ -4440,6 +4506,10 @@ template<> inline const ArgMaxOptions *Operator::builtin_options_as<ArgMaxOption
 
 template<> inline const LessOptions *Operator::builtin_options_as<LessOptions>() const {
   return builtin_options_as_LessOptions();
+}
+
+template<> inline const NegOptions *Operator::builtin_options_as<NegOptions>() const {
+  return builtin_options_as_NegOptions();
 }
 
 struct OperatorBuilder {
@@ -4709,6 +4779,7 @@ struct ModelT : public flatbuffers::NativeTable {
   std::vector<std::unique_ptr<SubGraphT>> subgraphs;
   std::string description;
   std::vector<std::unique_ptr<BufferT>> buffers;
+  std::vector<int32_t> metadata_buffer;
   ModelT()
       : version(0) {
   }
@@ -4721,7 +4792,8 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_OPERATOR_CODES = 6,
     VT_SUBGRAPHS = 8,
     VT_DESCRIPTION = 10,
-    VT_BUFFERS = 12
+    VT_BUFFERS = 12,
+    VT_METADATA_BUFFER = 14
   };
   uint32_t version() const {
     return GetField<uint32_t>(VT_VERSION, 0);
@@ -4738,6 +4810,9 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const flatbuffers::Vector<flatbuffers::Offset<Buffer>> *buffers() const {
     return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<Buffer>> *>(VT_BUFFERS);
   }
+  const flatbuffers::Vector<int32_t> *metadata_buffer() const {
+    return GetPointer<const flatbuffers::Vector<int32_t> *>(VT_METADATA_BUFFER);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_VERSION) &&
@@ -4752,6 +4827,8 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyOffset(verifier, VT_BUFFERS) &&
            verifier.Verify(buffers()) &&
            verifier.VerifyVectorOfTables(buffers()) &&
+           VerifyOffset(verifier, VT_METADATA_BUFFER) &&
+           verifier.Verify(metadata_buffer()) &&
            verifier.EndTable();
   }
   ModelT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4777,6 +4854,9 @@ struct ModelBuilder {
   void add_buffers(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Buffer>>> buffers) {
     fbb_.AddOffset(Model::VT_BUFFERS, buffers);
   }
+  void add_metadata_buffer(flatbuffers::Offset<flatbuffers::Vector<int32_t>> metadata_buffer) {
+    fbb_.AddOffset(Model::VT_METADATA_BUFFER, metadata_buffer);
+  }
   explicit ModelBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -4795,8 +4875,10 @@ inline flatbuffers::Offset<Model> CreateModel(
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OperatorCode>>> operator_codes = 0,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SubGraph>>> subgraphs = 0,
     flatbuffers::Offset<flatbuffers::String> description = 0,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Buffer>>> buffers = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Buffer>>> buffers = 0,
+    flatbuffers::Offset<flatbuffers::Vector<int32_t>> metadata_buffer = 0) {
   ModelBuilder builder_(_fbb);
+  builder_.add_metadata_buffer(metadata_buffer);
   builder_.add_buffers(buffers);
   builder_.add_description(description);
   builder_.add_subgraphs(subgraphs);
@@ -4811,14 +4893,16 @@ inline flatbuffers::Offset<Model> CreateModelDirect(
     const std::vector<flatbuffers::Offset<OperatorCode>> *operator_codes = nullptr,
     const std::vector<flatbuffers::Offset<SubGraph>> *subgraphs = nullptr,
     const char *description = nullptr,
-    const std::vector<flatbuffers::Offset<Buffer>> *buffers = nullptr) {
+    const std::vector<flatbuffers::Offset<Buffer>> *buffers = nullptr,
+    const std::vector<int32_t> *metadata_buffer = nullptr) {
   return tflite::CreateModel(
       _fbb,
       version,
       operator_codes ? _fbb.CreateVector<flatbuffers::Offset<OperatorCode>>(*operator_codes) : 0,
       subgraphs ? _fbb.CreateVector<flatbuffers::Offset<SubGraph>>(*subgraphs) : 0,
       description ? _fbb.CreateString(description) : 0,
-      buffers ? _fbb.CreateVector<flatbuffers::Offset<Buffer>>(*buffers) : 0);
+      buffers ? _fbb.CreateVector<flatbuffers::Offset<Buffer>>(*buffers) : 0,
+      metadata_buffer ? _fbb.CreateVector<int32_t>(*metadata_buffer) : 0);
 }
 
 flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_fbb, const ModelT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -6054,6 +6138,29 @@ inline flatbuffers::Offset<LessOptions> CreateLessOptions(flatbuffers::FlatBuffe
       _fbb);
 }
 
+inline NegOptionsT *NegOptions::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = new NegOptionsT();
+  UnPackTo(_o, _resolver);
+  return _o;
+}
+
+inline void NegOptions::UnPackTo(NegOptionsT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+}
+
+inline flatbuffers::Offset<NegOptions> NegOptions::Pack(flatbuffers::FlatBufferBuilder &_fbb, const NegOptionsT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateNegOptions(_fbb, _o, _rehasher);
+}
+
+inline flatbuffers::Offset<NegOptions> CreateNegOptions(flatbuffers::FlatBufferBuilder &_fbb, const NegOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { flatbuffers::FlatBufferBuilder *__fbb; const NegOptionsT* __o; const flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  return tflite::CreateNegOptions(
+      _fbb);
+}
+
 inline OperatorCodeT *OperatorCode::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
   auto _o = new OperatorCodeT();
   UnPackTo(_o, _resolver);
@@ -6205,6 +6312,7 @@ inline void Model::UnPackTo(ModelT *_o, const flatbuffers::resolver_function_t *
   { auto _e = subgraphs(); if (_e) { _o->subgraphs.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->subgraphs[_i] = std::unique_ptr<SubGraphT>(_e->Get(_i)->UnPack(_resolver)); } } };
   { auto _e = description(); if (_e) _o->description = _e->str(); };
   { auto _e = buffers(); if (_e) { _o->buffers.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->buffers[_i] = std::unique_ptr<BufferT>(_e->Get(_i)->UnPack(_resolver)); } } };
+  { auto _e = metadata_buffer(); if (_e) { _o->metadata_buffer.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->metadata_buffer[_i] = _e->Get(_i); } } };
 }
 
 inline flatbuffers::Offset<Model> Model::Pack(flatbuffers::FlatBufferBuilder &_fbb, const ModelT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -6220,13 +6328,15 @@ inline flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_f
   auto _subgraphs = _o->subgraphs.size() ? _fbb.CreateVector<flatbuffers::Offset<SubGraph>> (_o->subgraphs.size(), [](size_t i, _VectorArgs *__va) { return CreateSubGraph(*__va->__fbb, __va->__o->subgraphs[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _description = _o->description.empty() ? 0 : _fbb.CreateString(_o->description);
   auto _buffers = _o->buffers.size() ? _fbb.CreateVector<flatbuffers::Offset<Buffer>> (_o->buffers.size(), [](size_t i, _VectorArgs *__va) { return CreateBuffer(*__va->__fbb, __va->__o->buffers[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _metadata_buffer = _o->metadata_buffer.size() ? _fbb.CreateVector(_o->metadata_buffer) : 0;
   return tflite::CreateModel(
       _fbb,
       _version,
       _operator_codes,
       _subgraphs,
       _description,
-      _buffers);
+      _buffers,
+      _metadata_buffer);
 }
 
 inline bool VerifyBuiltinOptions(flatbuffers::Verifier &verifier, const void *obj, BuiltinOptions type) {
@@ -6396,6 +6506,10 @@ inline bool VerifyBuiltinOptions(flatbuffers::Verifier &verifier, const void *ob
     }
     case BuiltinOptions_LessOptions: {
       auto ptr = reinterpret_cast<const LessOptions *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case BuiltinOptions_NegOptions: {
+      auto ptr = reinterpret_cast<const NegOptions *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return false;
@@ -6580,6 +6694,10 @@ inline void *BuiltinOptionsUnion::UnPack(const void *obj, BuiltinOptions type, c
       auto ptr = reinterpret_cast<const LessOptions *>(obj);
       return ptr->UnPack(resolver);
     }
+    case BuiltinOptions_NegOptions: {
+      auto ptr = reinterpret_cast<const NegOptions *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -6750,6 +6868,10 @@ inline flatbuffers::Offset<void> BuiltinOptionsUnion::Pack(flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const LessOptionsT *>(value);
       return CreateLessOptions(_fbb, ptr, _rehasher).Union();
     }
+    case BuiltinOptions_NegOptions: {
+      auto ptr = reinterpret_cast<const NegOptionsT *>(value);
+      return CreateNegOptions(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -6918,6 +7040,10 @@ inline BuiltinOptionsUnion::BuiltinOptionsUnion(const BuiltinOptionsUnion &u) FL
     }
     case BuiltinOptions_LessOptions: {
       value = new LessOptionsT(*reinterpret_cast<LessOptionsT *>(u.value));
+      break;
+    }
+    case BuiltinOptions_NegOptions: {
+      value = new NegOptionsT(*reinterpret_cast<NegOptionsT *>(u.value));
       break;
     }
     default:
@@ -7129,6 +7255,11 @@ inline void BuiltinOptionsUnion::Reset() {
     }
     case BuiltinOptions_LessOptions: {
       auto ptr = reinterpret_cast<LessOptionsT *>(value);
+      delete ptr;
+      break;
+    }
+    case BuiltinOptions_NegOptions: {
+      auto ptr = reinterpret_cast<NegOptionsT *>(value);
       delete ptr;
       break;
     }
