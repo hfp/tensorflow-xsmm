@@ -3405,7 +3405,11 @@ tf_cuda_only_cc_test(
         ":test",
         ":test_main",
         "//third_party/eigen3",
-    ],
+    ] + if_mkl(
+        [
+            "//third_party/mkl:intel_binary_blob",
+        ],
+    ),
 )
 
 tf_cc_test_gpu(
