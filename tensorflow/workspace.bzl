@@ -82,14 +82,13 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
     print("path_prefix was specified to tf_workspace but is no longer used " +
           "and will be removed in the future.")
 
-  tf_http_archive(
+  native.new_http_archive(
       name = "mkl_dnn",
       urls = [
-          "https://mirror.bazel.build/github.com/intel/mkl-dnn/archive/v0.13.tar.gz",
-          "https://github.com/intel/mkl-dnn/archive/v0.13.tar.gz",
+          "https://github.com/intel/mkl-dnn/archive/mkl-dnn-72236df2da36d2c73ce1c719c6e9fa04a2f6bdc7.zip",
       ],
-      sha256 = "d2cfd93a70cfe86ebe054477c530c9b5c1218b70f75856eb6d1956c68ee89e8f",
-      strip_prefix = "mkl-dnn-0.13",
+      sha256 = "b89be886e9684bba4a91a35ac861540d42beef61d32d4b58907317911e93ee47",
+      strip_prefix = "mkl-dnn-72236df2da36d2c73ce1c719c6e9fa04a2f6bdc7",
       build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
   )
 
