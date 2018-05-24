@@ -109,7 +109,7 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       urls = [
           "https://github.com/hfp/eigen/archive/master.zip",
       ],
-      sha256 = "d6cf068859d72c4df5ee62e3202ef84fb14e4e9b0618d9109ca183f18a53fb33",
+      sha256 = "26d339081293c313e5fcabb774fabfddb83a048eb129bd34ef2ec344d8e217c1",
       strip_prefix = "eigen-master",
       build_file = str(Label("//third_party:eigen.BUILD"))
   )
