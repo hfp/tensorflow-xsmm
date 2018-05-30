@@ -85,10 +85,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "mkl_dnn",
       urls = [
-          "https://github.com/intel/mkl-dnn/archive/e482f4eb69685e14356edd728b38a74eb0a716b3.zip",
+          "https://github.com/intel/mkl-dnn/archive/1d7ba736722b329cef23316bb30db69ce85fdcc5.zip",
       ],
-      sha256 = "8015f463269f77f7795a59202269c81ea63a30413df5b3a8103175c53c7ad6c2",
-      strip_prefix = "mkl-dnn-72236df2da36d2c73ce1c719c6e9fa04a2f6bdc7",
+      sha256 = "a68303c2a61479f72337f83648ba1e58c66279e8b15315460b4f9b3092e99277",
+      strip_prefix = "mkl-dnn-1d7ba736722b329cef23316bb30db69ce85fdcc5",
       build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
   )
 
@@ -129,10 +129,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "libxsmm_archive",
       urls = [
-          "https://github.com/hfp/libxsmm/archive/31cea3103baa6c35e4baa566776d2b4c84ece9ec.zip",
+          "https://github.com/hfp/libxsmm/archive/866522d60afc4a87c2acfea8704c665b3c1ebae7.zip",
       ],
-      sha256 = "cd7f0b23bcaa0bb4a79eb8839e5645fa99a01b06a7822b588c902009a012c88c",
-      strip_prefix = "libxsmm-31cea3103baa6c35e4baa566776d2b4c84ece9ec",
+      sha256 = "f2052ccc2f3aca63e69baf5f251c0bcbb00054897fffe140aace6f9f27a10f00",
+      strip_prefix = "libxsmm-866522d60afc4a87c2acfea8704c665b3c1ebae7",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
   )
 
