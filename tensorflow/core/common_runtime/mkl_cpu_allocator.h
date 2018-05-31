@@ -33,6 +33,9 @@ limitations under the License.
 
 #if defined(TENSORFLOW_USE_LIBXSMM)
 # include <libxsmm.h>
+# if !defined(TENSORFLOW_USE_LIBXSMM_SCRATCH) && 0
+#   define TENSORFLOW_USE_LIBXSMM_SCRATCH
+# endif
 #endif
 
 #ifdef _WIN32
@@ -66,7 +69,7 @@ class MklCPUAllocator : public VisitableAllocator {
 
   MklCPUAllocator() {
     TF_CHECK_OK(Initialize());
-#if defined(TENSORFLOW_USE_LIBXSMM)
+#if defined(TENSORFLOW_USE_LIBXSMM_SCRATCH)
     libxsmm_init();
     { libxsmm_malloc_function malloc_fn; libxsmm_free_function free_fn;
       typedef libxsmm_tf_allocator<libxsmm_scratch_allocator> scratch_allocator;
@@ -151,7 +154,7 @@ class MklCPUAllocator : public VisitableAllocator {
 
   static inline void* MallocHook(size_t size) {
     VLOG(3) << "MklCPUAllocator: In MallocHook";
-#if defined(TENSORFLOW_USE_LIBXSMM)
+#if defined(TENSORFLOW_USE_LIBXSMM_SCRATCH)
     return libxsmm_aligned_scratch(size, kAlignment);
 #else
     return cpu_allocator()->AllocateRaw(kAlignment, size);
@@ -160,7 +163,7 @@ class MklCPUAllocator : public VisitableAllocator {
 
   static inline void FreeHook(void* ptr) {
     VLOG(3) << "MklCPUAllocator: In FreeHook";
-#if defined(TENSORFLOW_USE_LIBXSMM)
+#if defined(TENSORFLOW_USE_LIBXSMM_SCRATCH)
     libxsmm_free(ptr);
 #else
     cpu_allocator()->DeallocateRaw(ptr);
