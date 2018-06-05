@@ -23,6 +23,7 @@ limitations under the License.
 namespace tflite {
 namespace internal {
 
+typedef unsigned int uint;
 using std::complex;
 
 namespace {

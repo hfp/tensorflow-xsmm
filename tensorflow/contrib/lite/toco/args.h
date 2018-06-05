@@ -32,6 +32,8 @@ limitations under the License.
 
 namespace toco {
 
+using namespace absl;
+
 // Since std::vector<int32> is in the std namespace, and we are not allowed
 // to add ParseFlag/UnparseFlag to std, we introduce a simple wrapper type
 // to use as the flag type:
