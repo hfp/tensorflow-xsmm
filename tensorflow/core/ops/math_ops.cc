@@ -239,10 +239,6 @@ REGISTER_OP("Acos").UNARY();
 
 REGISTER_OP("Atan").UNARY();
 
-REGISTER_OP("BesselI0e").UNARY_REAL();
-
-REGISTER_OP("BesselI1e").UNARY_REAL();
-
 #undef UNARY
 #undef UNARY_REAL
 #undef UNARY_COMPLEX
