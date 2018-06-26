@@ -230,11 +230,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "org_sqlite",
       urls = [
-          "https://mirror.bazel.build/www.sqlite.org/2018/sqlite-amalgamation-3230100.zip",
-          "https://www.sqlite.org/2018/sqlite-amalgamation-3230100.zip",
+          "https://mirror.bazel.build/www.sqlite.org/2018/sqlite-amalgamation-3240000.zip",
+          "https://www.sqlite.org/2018/sqlite-amalgamation-3240000.zip",
       ],
-      sha256 = "4239a1f69e5721d07d9a374eb84d594225229e54be4ee628da2995f4315d8dfc",
-      strip_prefix = "sqlite-amalgamation-3230100",
+      sha256 = "ad68c1216c3a474cf360c7581a4001e952515b3649342100f2d7ca7c8e313da6",
+      strip_prefix = "sqlite-amalgamation-3240000",
       build_file = clean_dep("//third_party:sqlite.BUILD"),
   )
 
@@ -425,11 +425,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "grpc",
       urls = [
-          "https://mirror.bazel.build/github.com/grpc/grpc/archive/d184fa229d75d336aedea0041bd59cb93e7e267f.tar.gz",
-          "https://github.com/grpc/grpc/archive/d184fa229d75d336aedea0041bd59cb93e7e267f.tar.gz",
+          "https://mirror.bazel.build/github.com/grpc/grpc/archive/v1.12.1.tar.gz",
+          "https://github.com/grpc/grpc/archive/v1.12.1.tar.gz",
       ],
-      sha256 = "895b31310e718a61f7335759a778c068a6edde1c089883598a0830cbb7075673",
-      strip_prefix = "grpc-d184fa229d75d336aedea0041bd59cb93e7e267f",
+      sha256 = "f6afbfafa8e7b524727d1ff37ff22fe9c3dcca07bd864e7a9d1efabf1d15d13c",
+      strip_prefix = "grpc-1.12.1",
   )
 
 
@@ -659,12 +659,12 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
 
   tf_http_archive(
       name = "cython",
-      sha256 = "6dcd30b5ceb887b2b965ee7ceb82ea3acb5f0642fe2206c7636b45acea4798e5",
+      sha256 = "05e3eb7f06043f5ff2028338370329e71c29f57315e95f4dc6ad7c4971dd4c6f",
       urls = [
-          "https://mirror.bazel.build/github.com/cython/cython/archive/3732784c45cfb040a5b0936951d196f83a12ea17.tar.gz",
-          "https://github.com/cython/cython/archive/3732784c45cfb040a5b0936951d196f83a12ea17.tar.gz",
+          "https://mirror.bazel.build/github.com/cython/cython/archive/0.28.3.tar.gz",
+          "https://github.com/cython/cython/archive/0.28.3.tar.gz",
       ],
-      strip_prefix = "cython-3732784c45cfb040a5b0936951d196f83a12ea17",
+      strip_prefix = "cython-0.28.3",
       build_file = clean_dep("//third_party:cython.BUILD"),
       delete = ["BUILD.bazel"],
   )
