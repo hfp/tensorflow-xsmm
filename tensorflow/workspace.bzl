@@ -106,10 +106,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "eigen_archive",
       urls = [
-          "https://github.com/hfp/eigen/archive/cb6b500ac64537924c7d813709556886a0566c15.zip",
+          "https://github.com/hfp/eigen/archive/7273dc7958437dda65df70682dc5c5e6540a5ef0.zip",
       ],
-      sha256 = "099a0c1a8676800e14521e88f973ea73af3438a30b5bf66575e092a6b605c682",
-      strip_prefix = "eigen-cb6b500ac64537924c7d813709556886a0566c15",
+      sha256 = "982350c32c8901f9d31d0d6e1c282e06f441b2c4647f1d1a2d0460d7bfed4920",
+      strip_prefix = "eigen-7273dc7958437dda65df70682dc5c5e6540a5ef0",
       build_file = str(Label("//third_party:eigen.BUILD"))
   )
 
@@ -129,10 +129,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "libxsmm_archive",
       urls = [
-          "https://github.com/hfp/libxsmm/archive/2ba2f7819888926de98f0808edda891740628fc2.zip",
+          "https://github.com/hfp/libxsmm/archive/1913104cee619caa920115710a9c14a74d98fc16.zip",
       ],
-      sha256 = "1dd3e498178c9316f11827640aa315abfabca1d55548a1ac48597fda6ccc297e",
-      strip_prefix = "libxsmm-2ba2f7819888926de98f0808edda891740628fc2",
+      sha256 = "107282447ba057e69040825ba1ca9815ca77ce94d32cce97b4d7b3d4b3538074",
+      strip_prefix = "libxsmm-1913104cee619caa920115710a9c14a74d98fc16",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
   )
 
@@ -163,11 +163,11 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   tf_http_archive(
       name = "com_github_googlecloudplatform_google_cloud_cpp",
       urls = [
-          "https://mirror.bazel.build/github.com/GoogleCloudPlatform/google-cloud-cpp/archive/f9ff105957965bcf87f7cb9a93e951c3d08d1734.tar.gz",
-          "https://github.com/GoogleCloudPlatform/google-cloud-cpp/archive/f9ff105957965bcf87f7cb9a93e951c3d08d1734.tar.gz",
+          "https://mirror.bazel.build/github.com/GoogleCloudPlatform/google-cloud-cpp/archive/53f822805e77ea7715f5b52c592a162c515c7219.tar.gz",
+          "https://github.com/GoogleCloudPlatform/google-cloud-cpp/archive/53f822805e77ea7715f5b52c592a162c515c7219.tar.gz",
       ],
-      sha256 = "edb347aae9869ffdcf8df6288335bcc535fec46da946b385c16968e96a74b208",
-      strip_prefix = "google-cloud-cpp-f9ff105957965bcf87f7cb9a93e951c3d08d1734",
+      sha256 = "06853bfca77ef4aec09db5ab48c548f68ef2e18f17404cbce61f8d9b820f951b",
+      strip_prefix = "google-cloud-cpp-53f822805e77ea7715f5b52c592a162c515c7219",
   )
 
   tf_http_archive(
@@ -748,6 +748,14 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       urls = [
           "https://mirror.bazel.build/storage.googleapis.com/download.tensorflow.org/models/tflite/mobilenet_ssd_tflite_v1.zip",
           "https://storage.googleapis.com/download.tensorflow.org/models/tflite/mobilenet_ssd_tflite_v1.zip",
+      ],
+      build_file = str(Label("//third_party:tflite_mobilenet.BUILD")),
+  )
+  tf_http_archive(
+      name = "tflite_mobilenet_ssd_quant",
+      sha256 = "a809cd290b4d6a2e8a9d5dad076e0bd695b8091974e0eed1052b480b2f21b6dc",
+      urls = ["https://mirror.bazel.build/storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_0.75_quant_2018_06_29.zip",
+          "https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_0.75_quant_2018_06_29.zip",
       ],
       build_file = str(Label("//third_party:tflite_mobilenet.BUILD")),
   )

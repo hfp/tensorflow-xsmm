@@ -71,6 +71,19 @@ py_test(
 )
 
 tf_xla_py_test(
+    name = "adadelta_test",
+    size = "medium",
+    srcs = ["adadelta_test.py"],
+    deps = [
+        ":xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform_test",
+        "//tensorflow/python:training",
+    ],
+)
+
+tf_xla_py_test(
     name = "adagrad_test",
     size = "small",
     srcs = ["adagrad_test.py"],
@@ -887,6 +900,8 @@ tf_xla_py_test(
     name = "sort_ops_test",
     size = "small",
     srcs = ["sort_ops_test.py"],
+    # Times out in fastbuild mode.
+    tags = ["optonly"],
     deps = [
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/compiler/tf2xla/python:xla",

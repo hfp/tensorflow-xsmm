@@ -231,32 +231,16 @@ TEST(BasicInterpreter, CheckArenaAllocation) {
 
   ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
 
-  ASSERT_EQ(interpreter.tensor(0)->data.raw, interpreter.tensor(4)->data.raw);
-  ASSERT_EQ(interpreter.tensor(1)->data.raw, interpreter.tensor(7)->data.raw);
-  ASSERT_EQ(interpreter.tensor(8)->data.raw, nullptr);
-
-  ASSERT_LT(interpreter.tensor(4)->data.raw, interpreter.tensor(1)->data.raw);
-  ASSERT_LT(interpreter.tensor(6)->data.raw, interpreter.tensor(1)->data.raw);
   ASSERT_LT(interpreter.tensor(0)->data.raw, interpreter.tensor(1)->data.raw);
-
-  ASSERT_LT(interpreter.tensor(0)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(1)->data.raw, interpreter.tensor(3)->data.raw);
+  ASSERT_LT(interpreter.tensor(1)->data.raw, interpreter.tensor(2)->data.raw);
   ASSERT_LT(interpreter.tensor(2)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(4)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(6)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(7)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(8)->data.raw, interpreter.tensor(3)->data.raw);
-  ASSERT_LT(interpreter.tensor(9)->data.raw, interpreter.tensor(3)->data.raw);
-
-  ASSERT_LT(interpreter.tensor(0)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(1)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(2)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(3)->data.raw, interpreter.tensor(5)->data.raw);
+  ASSERT_LT(interpreter.tensor(3)->data.raw, interpreter.tensor(4)->data.raw);
   ASSERT_LT(interpreter.tensor(4)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(6)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(7)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(8)->data.raw, interpreter.tensor(5)->data.raw);
-  ASSERT_LT(interpreter.tensor(9)->data.raw, interpreter.tensor(5)->data.raw);
+  ASSERT_LT(interpreter.tensor(5)->data.raw, interpreter.tensor(7)->data.raw);
+  ASSERT_EQ(interpreter.tensor(6)->data.raw, interpreter.tensor(2)->data.raw);
+  // #7 is the one with the largest pointer.
+  ASSERT_EQ(interpreter.tensor(8)->data.raw, nullptr);
+  ASSERT_EQ(interpreter.tensor(9)->data.raw, interpreter.tensor(5)->data.raw);
 }
 
 TEST(BasicInterpreter, BufferAccess) {
@@ -290,6 +274,57 @@ TEST(BasicInterpreter, NoOpInterpreter) {
             kTfLiteOk);
   ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
   ASSERT_EQ(interpreter.Invoke(), kTfLiteOk);
+}
+
+TEST(BasicInterpreter, RedundantAllocateTensors) {
+  Interpreter interpreter;
+  ASSERT_EQ(interpreter.AddTensors(1), kTfLiteOk);
+  ASSERT_EQ(interpreter.SetInputs({0}), kTfLiteOk);
+
+  ASSERT_EQ(interpreter.SetTensorParametersReadWrite(
+                0, kTfLiteFloat32, "", {3}, TfLiteQuantizationParams()),
+            kTfLiteOk);
+
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  const auto data_raw = interpreter.tensor(0)->data.raw;
+  ASSERT_NE(data_raw, nullptr);
+
+  // A redundant allocation request should have no impact.
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  ASSERT_EQ(interpreter.tensor(0)->data.raw, data_raw);
+}
+
+TEST(BasicInterpreter, RedundantAllocateTensorsWithDynamicInputs) {
+  Interpreter interpreter;
+  TfLiteRegistration reg = {nullptr, nullptr, nullptr, nullptr};
+  ASSERT_EQ(interpreter.AddTensors(2), kTfLiteOk);
+  interpreter.SetInputs({0});
+  interpreter.SetOutputs({1});
+  interpreter.AddNodeWithParameters({0}, {1}, nullptr, 0, nullptr, &reg);
+
+  ASSERT_EQ(interpreter.SetTensorParametersReadWrite(
+                0, kTfLiteFloat32, "", {3}, TfLiteQuantizationParams()),
+            kTfLiteOk);
+  ASSERT_EQ(interpreter.SetTensorParametersReadWrite(
+                1, kTfLiteFloat32, "", {3}, TfLiteQuantizationParams()),
+            kTfLiteOk);
+
+  // Configure the input tensor as dynamic.
+  interpreter.tensor(0)->data.raw = nullptr;
+  interpreter.tensor(0)->allocation_type = kTfLiteDynamic;
+
+  ASSERT_EQ(interpreter.ResizeInputTensor(interpreter.inputs()[0], {1, 2, 3}),
+            kTfLiteOk);
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  ASSERT_NE(interpreter.tensor(1)->data.raw, nullptr);
+
+  // Reset the output tensor's buffer.
+  interpreter.tensor(1)->data.raw = nullptr;
+
+  // A redundant allocation request should be honored, as the input tensor
+  // was marked dynamic.
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  ASSERT_NE(interpreter.tensor(1)->data.raw, nullptr);
 }
 
 TEST(BasicInterpreter, ResizingTensors) {
@@ -347,6 +382,37 @@ TEST(BasicInterpreter, ResizingTensors) {
   // TfLiteTensorRealloc(tensor->bytes, tensor) is a no-op.
   TfLiteTensorRealloc(17 * sizeof(float), tensor);
   tensor->data.f[15] = 0.123f;
+}
+
+TEST(BasicInterpreter, NoopResizingTensors) {
+  Interpreter interpreter;
+  ASSERT_EQ(interpreter.AddTensors(1), kTfLiteOk);
+  ASSERT_EQ(interpreter.SetInputs({0}), kTfLiteOk);
+  ASSERT_EQ(interpreter.SetOutputs({0}), kTfLiteOk);
+
+  ASSERT_EQ(interpreter.SetTensorParametersReadWrite(
+                0, kTfLiteFloat32, "", {3}, TfLiteQuantizationParams()),
+            kTfLiteOk);
+
+  int t = interpreter.inputs()[0];
+  TfLiteTensor* tensor = interpreter.tensor(t);
+
+  ASSERT_EQ(interpreter.ResizeInputTensor(t, {1, 2, 3}), kTfLiteOk);
+  EXPECT_EQ(tensor->bytes, 6 * sizeof(float));
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  tensor->data.f[5] = 0.123f;
+
+  // Resizing to the same size should not trigger re-allocation.
+  ASSERT_EQ(interpreter.ResizeInputTensor(t, {1, 2, 3}), kTfLiteOk);
+  EXPECT_EQ(tensor->bytes, 6 * sizeof(float));
+  ASSERT_NE(tensor->data.raw, nullptr);
+  ASSERT_EQ(tensor->data.f[5], 0.123f);
+
+  // Explicitly allocating should be a no-op, as no resize was performed.
+  ASSERT_EQ(interpreter.AllocateTensors(), kTfLiteOk);
+  EXPECT_EQ(tensor->bytes, 6 * sizeof(float));
+  ASSERT_NE(tensor->data.raw, nullptr);
+  ASSERT_EQ(tensor->data.f[5], 0.123f);
 }
 
 TEST(BasicInterpreter, OneOpInterpreter) {
