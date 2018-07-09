@@ -85,10 +85,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "mkl_dnn",
       urls = [
-          "https://github.com/intel/mkl-dnn/archive/05a51457124ab4c0deedfff2f37f07705019f919.zip",
+          "https://github.com/intel/mkl-dnn/archive/5ef806754532adc27ed1a428eb40cafa72f632c6.zip",
       ],
-      sha256 = "0e81060856b2746436fbb1afb40846c7094d848b531ba505d75aa5c8af38f741",
-      strip_prefix = "mkl-dnn-05a51457124ab4c0deedfff2f37f07705019f919",
+      sha256 = "eef8886d4c6f86e720916e11b6f42abcdc679603257a02919a9bc5cee742157a",
+      strip_prefix = "mkl-dnn-5ef806754532adc27ed1a428eb40cafa72f632c6",
       build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
   )
 
@@ -106,10 +106,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "eigen_archive",
       urls = [
-          "https://github.com/hfp/eigen/archive/5ff080886edbcc47a77930362d4f30385834741c.zip",
+          "https://github.com/hfp/eigen/archive/c242e6dc3b519709713fce034f0220545ba713eb.zip",
       ],
-      sha256 = "89397bfca8507dbc0c4122146d7b3f4b29e633b5aa82662f30079fd2cbfb5830",
-      strip_prefix = "eigen-5ff080886edbcc47a77930362d4f30385834741c",
+      sha256 = "85fbe68bf3d954db45b96f714c20e047a644f8fd73855a6e7eff9caffe3fcd3e",
+      strip_prefix = "eigen-c242e6dc3b519709713fce034f0220545ba713eb",
       build_file = str(Label("//third_party:eigen.BUILD"))
   )
 
@@ -129,10 +129,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   native.new_http_archive(
       name = "libxsmm_archive",
       urls = [
-          "https://github.com/hfp/libxsmm/archive/b189d384d649595d9a3ebfd3b37126a33d7038bc.zip",
+          "https://github.com/hfp/libxsmm/archive/2fa8cc04b59d102a0a616ba9bbc15cb72514bc45.zip",
       ],
-      sha256 = "826892a18e9e979bdfc22f3556aa9503880cff234bd1ae9f6cd3661382413014",
-      strip_prefix = "libxsmm-b189d384d649595d9a3ebfd3b37126a33d7038bc",
+      sha256 = "cb17c94f3943d4358c73e8bb390fb8aed9ae06c07a296ba543bfb08a6b38ab07",
+      strip_prefix = "libxsmm-2fa8cc04b59d102a0a616ba9bbc15cb72514bc45",
       build_file = str(Label("//third_party:libxsmm.BUILD")),
   )
 
