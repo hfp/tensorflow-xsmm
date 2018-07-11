@@ -333,6 +333,7 @@ filegroup(
         "platform/init_main.h",
         "platform/mem.h",
         "platform/mutex.h",
+        "platform/numa.h",
         "platform/thread_annotations.h",
     ],
     visibility = ["//visibility:private"],
@@ -3239,6 +3240,28 @@ tf_cc_test(
 )
 
 tf_cc_test(
+    name = "platform_numa_test",
+    size = "small",
+    srcs = ["platform/numa_test.cc"],
+    tags = [
+        # This test will not pass unless it has access to all NUMA nodes
+        # on the executing machine.
+        "manual",
+        "notap",
+    ],
+    deps = [
+        ":framework",
+        ":lib",
+        ":lib_internal",
+        ":lib_test_internal",
+        ":protos_all_cc",
+        ":test",
+        ":test_main",
+        "//third_party/eigen3",
+    ],
+)
+
+tf_cc_test(
     name = "platform_setround_test",
     size = "small",
     srcs = ["platform/setround_test.cc"],
@@ -3602,6 +3625,7 @@ tf_cc_test_mkl(
     deps = [
         ":core",
         ":core_cpu",
+        ":core_cpu_internal",
         ":framework",
         ":framework_internal",
         ":test",
