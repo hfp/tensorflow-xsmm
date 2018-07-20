@@ -3229,6 +3229,7 @@ tf_cc_tests(
         ":test",
         ":test_main",
         "//third_party/eigen3",
+        "@zlib_archive//:zlib",
     ],
 )
 
