@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,28 +13,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/xla/service/pool.h"
+#ifndef TENSORFLOW_COMPILER_XLA_SERVICE_LLVM_IR_MATH_OPS_H_
+#define TENSORFLOW_COMPILER_XLA_SERVICE_LLVM_IR_MATH_OPS_H_
 
-#include "tensorflow/compiler/xla/test_helpers.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Value.h"
 
 namespace xla {
-namespace {
+namespace llvm_ir {
 
-using PoolTest = ::testing::Test;
+// Emits an approximation of tanh. The implementation uses the same rational
+// interpolant as implemented in Eigen3.
+llvm::Value* EmitFastTanh(llvm::IRBuilder<>* b, llvm::Value* input);
 
-TEST_F(PoolTest, Test) {
-  Pool<int> pool;
-
-  {
-    auto ptr = pool.Allocate();
-    EXPECT_NE(nullptr, ptr.get());
-    *ptr = 5;
-  }
-
-  auto ptr = pool.Allocate();
-  EXPECT_NE(nullptr, ptr.get());
-  EXPECT_EQ(5, *ptr);
-}
-
-}  // namespace
+}  // namespace llvm_ir
 }  // namespace xla
+
+#endif  // TENSORFLOW_COMPILER_XLA_SERVICE_LLVM_IR_MATH_OPS_H_
