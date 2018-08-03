@@ -175,7 +175,7 @@ class Layer(checkpointable.CheckpointableBase):
 
     self.supports_masking = False
 
-    call_argspec = tf_inspect.getargspec(self.call)
+    call_argspec = tf_inspect.getfullargspec(self.call)
     if 'training' in call_argspec.args:
       self._expects_training_arg = True
     else:
@@ -735,9 +735,11 @@ class Layer(checkpointable.CheckpointableBase):
           input_shapes = nest.map_structure(lambda x: x.shape, inputs)
 
         if (not hasattr(self, '_is_graph_network') or
-            self.__class__.__name__ == 'Sequential'):
-          # Only if self is a layer or an instance of a sequential model do we
-          # need to build it.
+            self.__class__.__name__ == 'Sequential' or
+            not hasattr(self.build, '_is_default')):
+          # Only if self is a layer, an instance of a sequential model, or
+          # the user has manually overwritten the build method do we need to
+          # build it.
           self.build(input_shapes)
         # We must set self.built since user defined build functions are not
         # constrained to set self.built.
@@ -904,7 +906,7 @@ class Layer(checkpointable.CheckpointableBase):
       assert len(call_args) == 1  # TypeError raised earlier in __call__.
       return call_args[0], call_kwargs
     else:
-      call_arg_spec = tf_inspect.getargspec(self.call)
+      call_arg_spec = tf_inspect.getfullargspec(self.call)
       # There is no explicit "inputs" argument expected or provided to
       # call(). Arguments which have default values are considered non-inputs,
       # and arguments without are considered inputs.
@@ -924,8 +926,8 @@ class Layer(checkpointable.CheckpointableBase):
       _, unwrapped_call = tf_decorator.unwrap(self.call)
       bound_args = inspect.getcallargs(
           unwrapped_call, *call_args, **call_kwargs)
-      if call_arg_spec.keywords is not None:
-        var_kwargs = bound_args.pop(call_arg_spec.keywords)
+      if call_arg_spec.varkw is not None:
+        var_kwargs = bound_args.pop(call_arg_spec.varkw)
         bound_args.update(var_kwargs)
         keyword_arg_names = keyword_arg_names.union(var_kwargs.keys())
       all_args = call_arg_spec.args
@@ -1956,6 +1958,12 @@ def make_variable(name,
       synchronization=synchronization,
       aggregation=aggregation)
   return v
+
+
+def default(method):
+  """Decorates a method to detect overrides in subclasses."""
+  method._is_default = True
+  return method
 
 
 def generate_placeholders_from_shape(shape):
