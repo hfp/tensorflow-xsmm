@@ -443,7 +443,7 @@ class MultiWorkerCollectiveAllReduceTest(
 
       left_values = np.array(
           sess.run(list(left._index.values()), options=run_options)).flatten()
-      right_values = np.array(right._index.values()).flatten()
+      right_values = np.array(list(right._index.values())).flatten()
       self.assertEqual(len(left_values), len(right_values))
       for l, r in zip(left_values, right_values):
         self.assertEqual(l, r)
@@ -545,7 +545,7 @@ class MultiWorkerCollectiveAllReduceTest(
     if context.num_gpus() < num_gpus:
       return
     self._run_between_graph_clients(
-        self._test_reduction, self._cluster_spec, num_gpus, local_model=True)
+        self._test_reduction, self._cluster_spec, num_gpus, local_mode=True)
 
 
 if __name__ == "__main__":

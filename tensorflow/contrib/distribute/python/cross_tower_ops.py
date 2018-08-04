@@ -567,12 +567,12 @@ class AllReduceCrossTowerOps(CrossTowerOps):
 
   def _batch_all_reduce(self, aggregation, per_device_values):
     """All reduce algorithm in a batch."""
-    logging.info(
-        "batch_all_reduce invoked for batches size = %d with "
+    logging.log_first_n(
+        logging.INFO, "batch_all_reduce invoked for batches size = %d with "
         "algorithm = %s, num_packs = %d, agg_small_grads_max_bytes = %d and "
-        "agg_small_grads_max_group = %d", len(per_device_values),
-        self._all_reduce_alg, self._num_packs, self._agg_small_grads_max_bytes,
-        self._agg_small_grads_max_group)
+        "agg_small_grads_max_group = %d" %
+        (len(per_device_values), self._all_reduce_alg, self._num_packs,
+         self._agg_small_grads_max_bytes, self._agg_small_grads_max_group), 10)
     destinations = per_device_values[0].devices
     grouped = _group_value_by_device(per_device_values)
 
@@ -677,12 +677,13 @@ class MultiWorkerAllReduce(AllReduceCrossTowerOps):
 
   def _batch_all_reduce(self, aggregation, per_device_values):
     """All reduce algorithm in a batch."""
-    logging.info(
+    logging.log_first_n(
+        logging.INFO,
         "distributed batch_all_reduce invoked for batches size = %d with "
         "allreduce_spec = %r, num_packs = %d, agg_small_grads_max_bytes = %d "
-        "and agg_small_grads_max_group = %d", len(per_device_values),
-        self._all_reduce_spec, self._num_packs, self._agg_small_grads_max_bytes,
-        self._agg_small_grads_max_group)
+        "and agg_small_grads_max_group = %d" %
+        (len(per_device_values), self._all_reduce_spec, self._num_packs,
+         self._agg_small_grads_max_bytes, self._agg_small_grads_max_group), 10)
 
     destinations = sorted(per_device_values[0].devices)
     device_grads = _group_value_by_device(per_device_values)
@@ -768,7 +769,7 @@ class CollectiveAllReduce(CrossTowerOps):
           index[d] = all_reduced._index[d]
         else:
           with ops.device(d):
-            index[d] = array_ops.identity(all_reduced._index.values()[0])
+            index[d] = array_ops.identity(list(all_reduced._index.values())[0])
       return value_lib.Mirrored(index)
 
   def _batch_reduce(self, aggregation, value_destination_pairs):
@@ -783,8 +784,7 @@ class CollectiveAllReduce(CrossTowerOps):
       raise ValueError("Eager mode with collective ops is not supported yet.")
 
     logging.log_first_n(
-        logging.INFO,
-        "Collective All-reduce invoked with batches size = %d, "
+        logging.INFO, "Collective All-reduce invoked with batches size = %d, "
         "num_workers = %d" % (len(per_device_values), self._num_workers), 10)
 
     grouped_by_tower = _group_value_by_device(per_device_values)
