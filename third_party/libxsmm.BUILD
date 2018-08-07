@@ -72,10 +72,10 @@ cc_library(
         "include/libxsmm_config.h",
         "include/libxsmm_dispatch.h",
     ],
-    copts = [
-        "-mavx",  # JIT does not work without avx anyway, and this silences some CRC32 warnings.
-        "-Wno-vla",  # Libxsmm convolutions heavily use VLA.
-    ],
+    #copts = [
+    #    "-mavx",  # JIT does not work without avx anyway, and this silences some CRC32 warnings.
+    #    "-Wno-vla",  # Libxsmm convolutions heavily use VLA.
+    #],
     defines = [
         "LIBXSMM_BUILD",
         "LIBXSMM_CTOR",
