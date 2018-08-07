@@ -165,11 +165,11 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     tf_http_archive(
         name = "com_github_googlecloudplatform_google_cloud_cpp",
         urls = [
-            "https://mirror.bazel.build/github.com/GoogleCloudPlatform/google-cloud-cpp/archive/f875700a023bdd706333cde45aee8758b272c357.tar.gz",
-            "https://github.com/GoogleCloudPlatform/google-cloud-cpp/archive/f875700a023bdd706333cde45aee8758b272c357.tar.gz",
+            "https://mirror.bazel.build/github.com/GoogleCloudPlatform/google-cloud-cpp/archive/14760a86c4ffab9943b476305c4fe927ad95db1c.tar.gz",
+            "https://github.com/GoogleCloudPlatform/google-cloud-cpp/archive/14760a86c4ffab9943b476305c4fe927ad95db1c.tar.gz",
         ],
-        sha256 = "a34f3c50b237686dc870b13baaa6a5836ce3473f2f2a02717299f0ff318372db",
-        strip_prefix = "google-cloud-cpp-f875700a023bdd706333cde45aee8758b272c357",
+        sha256 = "fdd3b3aecce60987e5525e55bf3a21d68a8695320bd5b980775af6507eec3944",
+        strip_prefix = "google-cloud-cpp-14760a86c4ffab9943b476305c4fe927ad95db1c",
     )
 
     tf_http_archive(
@@ -518,11 +518,11 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     tf_http_archive(
         name = "boringssl",
         urls = [
-            "https://mirror.bazel.build/github.com/google/boringssl/archive/a0fb951d2a26a8ee746b52f3ba81ab011a0af778.tar.gz",
-            "https://github.com/google/boringssl/archive/a0fb951d2a26a8ee746b52f3ba81ab011a0af778.tar.gz",
+            "https://mirror.bazel.build/github.com/google/boringssl/archive/f4fa779521475a98c1586dff349eb44934d5f281.tar.gz",
+            "https://github.com/google/boringssl/archive/f4fa779521475a98c1586dff349eb44934d5f281.tar.gz",
         ],
-        sha256 = "524ba98a56300149696481b4cb9ddebd0c7b7ac9b9f6edee81da2d2d7e5d2bb3",
-        strip_prefix = "boringssl-a0fb951d2a26a8ee746b52f3ba81ab011a0af778",
+        sha256 = "813d3ae5a11f8391941f716172c4438f888953d9f15ab609e1ee8f291a4e42d9",
+        strip_prefix = "boringssl-f4fa779521475a98c1586dff349eb44934d5f281",
     )
 
     tf_http_archive(
