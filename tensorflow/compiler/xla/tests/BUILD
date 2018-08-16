@@ -813,6 +813,7 @@ CONVOLUTION_TEST_DEPS = [
     "//tensorflow/compiler/xla/client:padding",
     "//tensorflow/compiler/xla/client:xla_builder",
     "//tensorflow/compiler/xla/tests:client_library_test_base",
+    "//tensorflow/compiler/xla/tests:hlo_test_base",
     "//tensorflow/compiler/xla/tests:literal_test_util",
     "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     "//tensorflow/core:lib",
@@ -2076,6 +2077,8 @@ tf_cc_test(
 xla_test(
     name = "test_utils_test",
     srcs = ["test_utils_test.cc"],
+    # There is nothing backend specific in this test, so just pick an arbitrary backend.
+    backends = ["cpu"],
     deps = [
         ":local_client_test_base",
         ":test_utils",
