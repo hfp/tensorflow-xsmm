@@ -134,8 +134,6 @@ class EagerContext {
 
   Rendezvous* GetRendezvous() { return rendezvous_; }
 
-  mutex* FunctionsMu() { return &functions_mu_; }
-
   const tensorflow::DeviceMgr* local_device_mgr() const {
     return (local_device_manager_ != nullptr) ? local_device_manager_.get()
                                               : local_unowned_device_manager_;
@@ -208,6 +206,7 @@ class EagerContext {
   // Only one of the below is set.
   std::unique_ptr<DeviceMgr> local_device_manager_;
   DeviceMgr* local_unowned_device_manager_;
+  std::unique_ptr<DeviceMgr> remote_device_manager_;
 
   // Devices owned by device_manager
   std::vector<Device*> devices_;
@@ -255,7 +254,6 @@ class EagerContext {
 
 #ifndef __ANDROID__
   void CloseRemoteContexts();
-  std::unique_ptr<DeviceMgr> remote_device_manager_;
 
   // The server_ is not const since we release it when the context is destroyed.
   // Therefore the server_ object is not marked as const (even though it should

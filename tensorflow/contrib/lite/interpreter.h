@@ -165,7 +165,7 @@ class Interpreter {
     return SetTensorParametersReadOnly(tensor_index, type, name, dims.size(),
                                        dims.data(), quantization, buffer, bytes,
                                        allocation);
-  };
+  }
 
   TfLiteStatus SetTensorParametersReadOnly(
       int tensor_index, TfLiteType type, const char* name, const size_t rank,
@@ -350,7 +350,7 @@ class Interpreter {
       // This can be null if the delegate doesn't use its own buffer.
       TF_LITE_ENSURE(&context_,
                      tensor->delegate->CopyFromBufferHandle != nullptr);
-      tensor->delegate->CopyFromBufferHandle(tensor->delegate,
+      tensor->delegate->CopyFromBufferHandle(&context_, tensor->delegate,
                                              tensor->buffer_handle,
                                              tensor->data.raw, tensor->bytes);
       tensor->data_is_stale = false;
