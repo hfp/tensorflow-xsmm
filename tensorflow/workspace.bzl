@@ -60,30 +60,27 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     mkl_repository(
         name = "mkl_linux",
         urls = [
-            "https://mirror.bazel.build/github.com/intel/mkl-dnn/releases/download/v0.15/mklml_lnx_2018.0.3.20180406.tgz",
-            "https://github.com/intel/mkl-dnn/releases/download/v0.15/mklml_lnx_2018.0.3.20180406.tgz",
+            "https://github.com/intel/mkl-dnn/releases/download/v0.16/mklml_lnx_2019.0.20180710.tgz",
         ],
-        sha256 = "d2305244fdc9b87db7426ed4496e87a4b3977ad3374d73b8000e8b7a5b7aa725",
+        sha256 = "e2233534a9d15c387e22260997af4312a39e9f86f791768409be273b5453c4e6",
         strip_prefix = "mklml_lnx_2018.0.3.20180406",
         build_file = clean_dep("//third_party/mkl:mkl.BUILD"),
     )
     mkl_repository(
         name = "mkl_windows",
         urls = [
-            "https://mirror.bazel.build/github.com/intel/mkl-dnn/releases/download/v0.15/mklml_win_2018.0.3.20180406.zip",
-            "https://github.com/intel/mkl-dnn/releases/download/v0.15/mklml_win_2018.0.3.20180406.zip",
+            "https://github.com/intel/mkl-dnn/releases/download/v0.16/mklml_win_2019.0.20180710.zip",
         ],
-        sha256 = "a584a5bf1c8d2ad70b90d12b52652030e9a338217719064fdb84b7ad0d693694",
+        sha256 = "3fdcff17b018a0082491adf3ba143358265336a801646e46e0191ec8d58d24a2",
         strip_prefix = "mklml_win_2018.0.3.20180406",
         build_file = clean_dep("//third_party/mkl:mkl.BUILD"),
     )
     mkl_repository(
         name = "mkl_darwin",
         urls = [
-            "https://mirror.bazel.build/github.com/intel/mkl-dnn/releases/download/v0.15/mklml_mac_2018.0.3.20180406.tgz",
-            "https://github.com/intel/mkl-dnn/releases/download/v0.15/mklml_mac_2018.0.3.20180406.tgz",
+            "https://github.com/intel/mkl-dnn/releases/download/v0.16/mklml_mac_2019.0.20180710.tgz",
         ],
-        sha256 = "094e3dfd61c816136dc8d12a45cc611ce26c5f4828176a3644cd0b0efa15a25b",
+        sha256 = "411a30014a938eb83fb9f37b3dbe8e371b106fc1dd621fc23123cadc72737ce6",
         strip_prefix = "mklml_mac_2018.0.3.20180406",
         build_file = clean_dep("//third_party/mkl:mkl.BUILD"),
     )
@@ -95,10 +92,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "mkl_dnn",
         urls = [
-            "https://github.com/intel/mkl-dnn/archive/a46b870cce30fdef186be4105ab1566fa902c499.zip",
+            "https://github.com/intel/mkl-dnn/archive/4e333787e0d66a1dca1218e99a891d493dbc8ef1.zip",
         ],
-        sha256 = "28e5352cd926260367b991183cd221c73205efbfbcd9723d22b2b09b92dafce3",
-        strip_prefix = "mkl-dnn-a46b870cce30fdef186be4105ab1566fa902c499",
+        sha256 = "1cc443d2bac496c5a844ff1d6811cece4cecf6e88c6253b831ee18f6a7671e21",
+        strip_prefix = "mkl-dnn-4e333787e0d66a1dca1218e99a891d493dbc8ef1",
         build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
     )
 
@@ -116,10 +113,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "eigen_archive",
         urls = [
-            "https://github.com/hfp/eigen/archive/e527205cf842602d81c4f7cc2fdd3ffdae8ac359.zip",
+            "https://github.com/hfp/eigen/archive/d9beb9ef0e59ed635472507b8be720fdd520deae.zip",
         ],
-        sha256 = "51e29466c68e8733d8a1c4bda71e358e6fa629f5e5a31c0ae88625e121e18487",
-        strip_prefix = "eigen-e527205cf842602d81c4f7cc2fdd3ffdae8ac359",
+        sha256 = "4fd279fe8548972ecf74603e9d9a3a2c9ade053de335a3bc2cb0d9b315b92399",
+        strip_prefix = "eigen-d9beb9ef0e59ed635472507b8be720fdd520deae",
         build_file = str(Label("//third_party:eigen.BUILD"))
     )
 
@@ -139,10 +136,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "libxsmm_archive",
         urls = [
-            "https://github.com/hfp/libxsmm/archive/45b187c73f9d8b32892281d5de507b752de6cd64.zip",
+            "https://github.com/hfp/libxsmm/archive/2db7b9d80fd1f79eacc97abc6d34195083c3c3dc.zip",
         ],
-        sha256 = "1d72ca3d9da0dc163658c7178f35d0d51367e0580d37288508747c8004594d6f",
-        strip_prefix = "libxsmm-45b187c73f9d8b32892281d5de507b752de6cd64",
+        sha256 = "2157925b0c7d6f6611d8bc4a1adc1d9685e13c37ae2f5773719c6db5100f60f5",
+        strip_prefix = "libxsmm-2db7b9d80fd1f79eacc97abc6d34195083c3c3dc",
         build_file = str(Label("//third_party:libxsmm.BUILD")),
     )
 
