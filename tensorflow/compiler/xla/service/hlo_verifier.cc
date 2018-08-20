@@ -84,7 +84,8 @@ Status ShapeVerifier::HandleConvolution(HloInstruction* convolution) {
       const Shape expected,
       ShapeInference::InferConvolveShape(
           convolution->operand(0)->shape(), convolution->operand(1)->shape(),
-          convolution->window(), convolution->convolution_dimension_numbers()));
+          convolution->window(), convolution->convolution_dimension_numbers(),
+          convolution->feature_group_count()));
   return CheckShape(convolution, expected);
 }
 
@@ -571,7 +572,7 @@ Status ShapeVerifier::HandleGather(HloInstruction* gather) {
       gather,
       ShapeInference::InferGatherShape(
           gather->operand(0)->shape(), gather->operand(1)->shape(),
-          gather->gather_dimension_numbers(), gather->gather_window_bounds()));
+          gather->gather_dimension_numbers(), gather->gather_slice_sizes()));
 }
 
 Status ShapeVerifier::HandleScatter(HloInstruction* scatter) {

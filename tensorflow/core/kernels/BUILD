@@ -1308,6 +1308,7 @@ tf_cuda_cc_test(
     srcs = ["gather_nd_op_test.cc"],
     deps = [
         ":gather_nd_op",
+        ":host_constant_op",
         ":ops_testutil",
         ":ops_util",
         "//tensorflow/core:core_cpu",
@@ -3176,6 +3177,7 @@ tf_cuda_cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":host_constant_op",
         ":ops_testutil",
         ":ops_util",
         ":reduction_ops",
@@ -3311,6 +3313,7 @@ tf_cuda_cc_test(
     srcs = ["diag_op_test.cc"],
     deps = [
         ":diag_op",
+        ":host_constant_op",
         ":ops_testutil",
         ":ops_util",
         "//tensorflow/core:core_cpu",
@@ -3638,6 +3641,7 @@ tf_cuda_cc_test(
     name = "nn_ops_test",
     srcs = ["nn_ops_test.cc"],
     deps = [
+        ":host_constant_op",
         ":nn",
         ":ops_testutil",
         ":ops_util",
@@ -3785,6 +3789,7 @@ tf_cuda_cc_test(
     srcs = ["spacetobatch_benchmark_test.cc"],
     deps = [
         ":batch_space_ops",
+        ":host_constant_op",
         ":ops_testutil",
         ":ops_util",
         "//tensorflow/core:core_cpu",
@@ -3924,6 +3929,7 @@ tf_cuda_cc_test(
     size = "small",
     srcs = ["random_op_test.cc"],
     deps = [
+        ":host_constant_op",
         ":random_ops",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:framework",
@@ -4178,6 +4184,7 @@ tf_cuda_cc_tests(
         "sparse_xent_op_test.cc",
     ],
     deps = [
+        ":host_constant_op",
         ":ops_testutil",
         ":ops_util",
         ":sparse",
@@ -4391,6 +4398,7 @@ cc_library(
         ":regex_full_match_op",
         ":regex_replace_op",
         ":string_join_op",
+        ":string_length_op",
         ":string_split_op",
         ":string_strip_op",
         ":string_to_hash_bucket_op",
@@ -4426,6 +4434,12 @@ tf_kernel_library(
 )
 
 tf_kernel_library(
+    name = "string_length_op",
+    prefix = "string_length_op",
+    deps = STRING_DEPS,
+)
+
+tf_kernel_library(
     name = "regex_full_match_op",
     prefix = "regex_full_match_op",
     deps = STRING_DEPS + ["@com_googlesource_code_re2//:re2"],
@@ -4435,6 +4449,24 @@ tf_kernel_library(
     name = "regex_replace_op",
     prefix = "regex_replace_op",
     deps = STRING_DEPS + ["@com_googlesource_code_re2//:re2"],
+)
+
+tf_cc_test(
+    name = "regex_replace_op_test",
+    size = "small",
+    srcs = ["regex_replace_op_test.cc"],
+    deps = [
+        ":regex_replace_op",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+        "//tensorflow/core/kernels:ops_testutil",
+        "//tensorflow/core/kernels:ops_util",
+    ],
 )
 
 tf_kernel_library(
@@ -4516,6 +4548,7 @@ tf_cuda_cc_test(
     size = "small",
     srcs = ["multinomial_op_test.cc"],
     deps = [
+        ":host_constant_op",
         ":multinomial_op",
         ":ops_util",
         "//tensorflow/core:core_cpu",
@@ -4543,6 +4576,7 @@ tf_cuda_cc_test(
     size = "small",
     srcs = ["parameterized_truncated_normal_op_test.cc"],
     deps = [
+        ":host_constant_op",
         ":ops_util",
         ":parameterized_truncated_normal_op",
         "//tensorflow/core:core_cpu",
