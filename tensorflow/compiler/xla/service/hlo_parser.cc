@@ -33,8 +33,9 @@ namespace xla {
 
 namespace {
 
+using ::absl::nullopt;
+using ::absl::optional;
 using ::tensorflow::StringPiece;
-using ::tensorflow::gtl::optional;
 using ::tensorflow::str_util::Join;
 using ::tensorflow::str_util::Split;
 using ::tensorflow::str_util::SplitAndParseAsInts;
@@ -66,7 +67,21 @@ class HloParser {
   StatusOr<Window> ParseWindowOnly();
   StatusOr<ConvolutionDimensionNumbers> ParseConvolutionDimensionNumbersOnly();
 
+  // Stand-alone parsing utility for a single instruction worth of text.
+  Status ParseSingleInstruction(HloComputation::Builder* builder,
+                                string* root_name);
+
  private:
+  // Locates an instruction with the given name in the instruction_pool_ or
+  // returns nullptr.
+  //
+  // If the missing_instruction_hook_ is registered and a "shape" is provided,
+  // the hook will be called and may satisfy the request for the given
+  // instruction. This is useful when we reify parameters as they're resolved;
+  // i.e. for ParseSingleInstruction.
+  std::pair<HloInstruction*, LocTy>* FindInstruction(
+      const string& name, const optional<Shape>& shape = nullopt);
+
   // ParseXXX returns false if an error occurred.
   bool ParseHloModule();
   bool ParseComputations();
@@ -140,6 +155,7 @@ class HloParser {
     kFusionKind,
     kDistribution,
     kDomain,
+    kPrecisionList,
   };
 
   struct AttrConfig {
@@ -205,6 +221,7 @@ class HloParser {
   bool ParseWindowPad(std::vector<std::vector<tensorflow::int64>>* pad);
 
   bool ParseSliceRanges(SliceRanges* result);
+  bool ParsePrecisionList(std::vector<PrecisionConfigProto::Precision>* result);
   bool ParseInt64List(const TokKind start, const TokKind end,
                       const TokKind delim,
                       std::vector<tensorflow::int64>* result);
@@ -223,6 +240,7 @@ class HloParser {
   bool ParseFftType(FftType* result);
   bool ParseFusionKind(HloInstruction::FusionKind* result);
   bool ParseRandomDistribution(RandomDistribution* result);
+  bool ParsePrecision(PrecisionConfigProto::Precision* result);
   bool ParseInt64(tensorflow::int64* result);
   bool ParseDouble(double* result);
   bool ParseBool(bool* result);
@@ -267,6 +285,12 @@ class HloParser {
   std::vector<std::unique_ptr<HloComputation>> computations_;
   const HloModuleConfig config_;
   std::vector<string> error_;
+
+  // Function that gets invoked when we try to resolve an instruction
+  // instruction_pool_ but fail to do so.
+  std::function<std::pair<HloInstruction*, LocTy>*(string,
+                                                   const optional<Shape>&)>
+      missing_instruction_hook_;
 };
 
 bool HloParser::Error(LocTy loc, StringPiece msg) {
@@ -291,6 +315,17 @@ bool HloParser::TokenError(StringPiece msg) {
 bool HloParser::Run() {
   lexer_.Lex();
   return ParseHloModule();
+}
+
+std::pair<HloInstruction*, HloParser::LocTy>* HloParser::FindInstruction(
+    const string& name, const optional<Shape>& shape) {
+  std::pair<HloInstruction*, LocTy>* instr =
+      tensorflow::gtl::FindOrNull(instruction_pool_, name);
+  // Potentially call the missing instruction hook.
+  if (instr == nullptr && missing_instruction_hook_ != nullptr) {
+    return missing_instruction_hook_(name, shape);
+  }
+  return instr;
 }
 
 // ::= 'HloModule' name computations
@@ -372,8 +407,7 @@ bool HloParser::ParseComputation(HloComputation** entry_computation) {
     return false;
   }
 
-  std::pair<HloInstruction*, LocTy>* root_node =
-      tensorflow::gtl::FindOrNull(instruction_pool_, root_name);
+  std::pair<HloInstruction*, LocTy>* root_node = FindInstruction(root_name);
   // This means some instruction was marked as ROOT but we didn't find it in the
   // pool, which should not happen.
   if (!root_name.empty() && root_node == nullptr) {
@@ -470,6 +504,10 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
   optional<string> backend_config;
   attrs["backend_config"] = {/*required=*/false, AttrTy::kString,
                              &backend_config};
+
+  optional<std::vector<PrecisionConfigProto::Precision>> operand_precision;
+  attrs["operand_precision"] = {/*required=*/false, AttrTy::kPrecisionList,
+                                &operand_precision};
 
   HloInstruction* instruction;
   switch (opcode) {
@@ -1180,20 +1218,6 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       }
       break;
     }
-    case HloOpcode::kHostCompute: {
-      optional<string> channel_name;
-      optional<tensorflow::int64> cost_estimate_ns;
-      attrs["channel_name"] = {/*required=*/true, AttrTy::kString,
-                               &channel_name};
-      attrs["cost_estimate_ns"] = {/*required=*/true, AttrTy::kInt64,
-                                   &cost_estimate_ns};
-      if (!ParseOperands(&operands) || !ParseAttributes(attrs)) {
-        return false;
-      }
-      instruction = builder->AddInstruction(HloInstruction::CreateHostCompute(
-          shape, operands, *channel_name, *cost_estimate_ns));
-      break;
-    }
     case HloOpcode::kDot: {
       optional<std::vector<tensorflow::int64>> lhs_contracting_dims;
       attrs["lhs_contracting_dims"] = {
@@ -1348,6 +1372,12 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
   }
   if (backend_config) {
     instruction->set_raw_backend_config_string(std::move(*backend_config));
+  }
+  if (operand_precision) {
+    PrecisionConfigProto precision_config;
+    *precision_config.mutable_operand_precision() = {operand_precision->begin(),
+                                                     operand_precision->end()};
+    instruction->set_precision_config(precision_config);
   }
   return AddInstruction(name, instruction, name_loc);
 }  // NOLINT(readability/fn_size)
@@ -1539,8 +1569,7 @@ bool HloParser::ParseInstructionNames(
     if (!ParseName(&name)) {
       return Error(loc, "expects a instruction name");
     }
-    std::pair<HloInstruction*, LocTy>* instr =
-        tensorflow::gtl::FindOrNull(instruction_pool_, name);
+    std::pair<HloInstruction*, LocTy>* instr = FindInstruction(name);
     if (!instr) {
       return TokenError(
           Printf("instruction '%s' is not defined", name.c_str()));
@@ -2023,6 +2052,7 @@ bool HloParser::ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
 //   ::= operand (, operand)*
 // operand ::= (shape)? name
 bool HloParser::ParseOperands(std::vector<HloInstruction*>* operands) {
+  CHECK(operands != nullptr);
   if (!ParseToken(TokKind::kLparen,
                   "expects '(' at the beginning of operands")) {
     return false;
@@ -2033,9 +2063,10 @@ bool HloParser::ParseOperands(std::vector<HloInstruction*>* operands) {
     do {
       LocTy loc = lexer_.GetLoc();
       string name;
+      optional<Shape> shape;
       if (CanBeShape()) {
-        Shape shape;
-        if (!ParseShape(&shape)) {
+        shape.emplace();
+        if (!ParseShape(&shape.value())) {
           return false;
         }
       }
@@ -2043,8 +2074,8 @@ bool HloParser::ParseOperands(std::vector<HloInstruction*>* operands) {
         return false;
       }
       std::pair<HloInstruction*, LocTy>* instruction =
-          tensorflow::gtl::FindOrNull(instruction_pool_, name);
-      if (!instruction) {
+          FindInstruction(name, shape);
+      if (instruction == nullptr) {
         return Error(loc, StrCat("instruction does not exist: ", name));
       }
       operands->push_back(instruction->first);
@@ -2055,6 +2086,7 @@ bool HloParser::ParseOperands(std::vector<HloInstruction*>* operands) {
 
 bool HloParser::ParseOperands(std::vector<HloInstruction*>* operands,
                               const int expected_size) {
+  CHECK(operands != nullptr);
   LocTy loc = lexer_.GetLoc();
   if (!ParseOperands(operands)) {
     return false;
@@ -2323,6 +2355,16 @@ bool HloParser::ParseAttributeHelper(
       }
       case AttrTy::kDomain: {
         return ParseDomain(static_cast<DomainData*>(attr_out_ptr));
+      }
+      case AttrTy::kPrecisionList: {
+        std::vector<PrecisionConfigProto::Precision> result;
+        if (!ParsePrecisionList(&result)) {
+          return false;
+        }
+        static_cast<optional<std::vector<PrecisionConfigProto::Precision>>*>(
+            attr_out_ptr)
+            ->emplace(result);
+        return true;
       }
     }
   }();
@@ -2594,6 +2636,24 @@ bool HloParser::ParseSliceRanges(SliceRanges* result) {
     result->strides.push_back(range.size() == 3 ? range[2] : 1);
   }
   return ParseToken(TokKind::kRbrace, "expects '}' to end ranges");
+}
+
+// precisionlist ::= start precision_elements end
+// precision_elements
+//   ::= /*empty*/
+//   ::= precision_val (delim precision_val)*
+bool HloParser::ParsePrecisionList(
+    std::vector<PrecisionConfigProto::Precision>* result) {
+  auto parse_and_add_item = [&]() {
+    PrecisionConfigProto::Precision item;
+    if (!ParsePrecision(&item)) {
+      return false;
+    }
+    result->push_back(item);
+    return true;
+  };
+  return ParseList(TokKind::kLbrace, TokKind::kRbrace, TokKind::kComma,
+                   parse_and_add_item);
 }
 
 // int64list ::= start int64_elements end
@@ -2922,6 +2982,23 @@ bool HloParser::ParseRandomDistribution(RandomDistribution* result) {
   return true;
 }
 
+bool HloParser::ParsePrecision(PrecisionConfigProto::Precision* result) {
+  VLOG(1) << "ParsePrecision";
+  if (lexer_.GetKind() != TokKind::kIdent) {
+    return TokenError("expects random distribution");
+  }
+  string val = lexer_.GetStrVal();
+  auto status_or_result = StringToPrecision(val);
+  if (!status_or_result.ok()) {
+    return TokenError(
+        Printf("expects precision but sees: %s, error: %s", val.c_str(),
+               status_or_result.status().error_message().c_str()));
+  }
+  *result = status_or_result.ValueOrDie();
+  lexer_.Lex();
+  return true;
+}
+
 bool HloParser::ParseInt64(tensorflow::int64* result) {
   VLOG(1) << "ParseInt64";
   if (lexer_.GetKind() != TokKind::kInt) {
@@ -3043,6 +3120,40 @@ HloParser::ParseConvolutionDimensionNumbersOnly() {
   return dnums;
 }
 
+Status HloParser::ParseSingleInstruction(HloComputation::Builder* builder,
+                                         string* root_name) {
+  TF_RET_CHECK(missing_instruction_hook_ == nullptr);
+
+  // The missing instruction hook we register creates the shaped instruction on
+  // the fly as a parameter and returns it.
+  int64 parameter_count = 0;
+  missing_instruction_hook_ =
+      [this, builder, &parameter_count](
+          string name,
+          const optional<Shape>& shape) -> std::pair<HloInstruction*, LocTy>* {
+    if (!shape.has_value()) {
+      Error(lexer_.GetLoc(),
+            StrCat("Operand ", name,
+                   " had no shape in HLO text; cannot create parameter for "
+                   "single-instruction module."));
+      return nullptr;
+    }
+    HloInstruction* parameter = builder->AddInstruction(
+        HloInstruction::CreateParameter(parameter_count++, *shape, name));
+    instruction_pool_[name] = {parameter, lexer_.GetLoc()};
+    return tensorflow::gtl::FindOrNull(instruction_pool_, name);
+  };
+
+  // Prime the lexer.
+  lexer_.Lex();
+
+  // Parse the instruction with the registered hook.
+  if (!ParseInstruction(builder, root_name)) {
+    return InvalidArgument("Syntax error:\n%s", GetError().c_str());
+  }
+  return Status::OK();
+}
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloString(
@@ -3058,6 +3169,19 @@ StatusOr<std::unique_ptr<HloModule>> ParseHloString(
     tensorflow::StringPiece str) {
   HloModuleConfig config;
   return ParseHloString(str, config);
+}
+
+StatusOr<std::unique_ptr<HloModule>> ParseHloOpToModule(
+    tensorflow::StringPiece str, tensorflow::StringPiece name) {
+  HloModuleConfig config;
+  HloParser parser(str, config);
+  auto builder = absl::make_unique<HloComputation::Builder>(name.ToString());
+  string root_name;
+  TF_RETURN_IF_ERROR(parser.ParseSingleInstruction(builder.get(), &root_name));
+  std::unique_ptr<HloComputation> computation = builder->Build();
+  auto module = absl::make_unique<HloModule>(name.ToString(), config);
+  module->AddEntryComputation(std::move(computation));
+  return std::move(module);
 }
 
 StatusOr<HloSharding> ParseSharding(tensorflow::StringPiece str) {

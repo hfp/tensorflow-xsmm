@@ -19,11 +19,11 @@ limitations under the License.
 #include <sys/types.h>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <type_traits>
 
-#include "third_party/eigen3/Eigen/Core"
 #include "fixedpoint/fixedpoint.h"
 #include "public/gemmlowp.h"
 #include "tensorflow/contrib/lite/kernels/internal/common.h"
@@ -2486,36 +2486,6 @@ void TensorFlowSplit(const Scalar* input_data, const Dims<4>& input_dims,
                   output_data, output_dims);
 }
 
-// TODO(benoitjacob) make this a proper reference impl without Eigen!
-template <typename Scalar>
-using MatrixMap = typename std::conditional<
-    std::is_const<Scalar>::value,
-    Eigen::Map<const Eigen::Matrix<typename std::remove_const<Scalar>::type,
-                                   Eigen::Dynamic, Eigen::Dynamic>>,
-    Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>>>::type;
-
-template <typename Scalar, int N>
-MatrixMap<Scalar> MapAsMatrixWithFirstDimAsRows(Scalar* data,
-                                                const Dims<N>& dims) {
-  const int rows = dims.sizes[0];
-  int cols = 1;
-  for (int d = 1; d < N; d++) {
-    cols *= dims.sizes[d];
-  }
-  return MatrixMap<Scalar>(data, rows, cols);
-}
-
-template <typename Scalar, int N>
-MatrixMap<Scalar> MapAsMatrixWithLastDimAsCols(Scalar* data,
-                                               const Dims<N>& dims) {
-  const int cols = dims.sizes[N - 1];
-  int rows = 1;
-  for (int d = 0; d < N - 1; d++) {
-    rows *= dims.sizes[d];
-  }
-  return MatrixMap<Scalar>(data, rows, cols);
-}
-
 inline int NodeOffset(int b, int h, int w, int height, int width) {
   return (b * height + h) * width + w;
 }
@@ -3896,39 +3866,16 @@ inline bool InitTensorDataForReduce(const int* dims, const int num_dims,
   return true;
 }
 
-// Computes the sum of elements across dimensions given in axis.
+// Computes the generic value (i.e., sum/max/min/prod) of elements across
+// dimensions given in axis. It needs to pass in init_value and reducer.
 template <typename T>
-inline bool Sum(const T* input_data, const int* input_dims,
-                const int input_num_dims, T* output_data,
-                const int* output_dims, const int output_num_dims,
-                const int* axis, const int num_axis_dimensions, bool keep_dims,
-                int* temp_index, int* resolved_axis) {
-  // Reset output data.
-  if (!InitTensorDataForReduce(output_dims, output_num_dims, static_cast<T>(0),
-                               output_data)) {
-    return false;
-  }
-
-  // Resolve axis.
-  int num_resolved_axis = 0;
-  if (!ResolveAxis(input_num_dims, axis, num_axis_dimensions, resolved_axis,
-                   &num_resolved_axis)) {
-    return false;
-  }
-
-  return ReduceSumImpl<T, T>(input_data, input_dims, output_dims,
-                             input_num_dims, output_num_dims, resolved_axis,
-                             num_resolved_axis, temp_index, output_data);
-}
-
-// Computes the max of elements across dimensions given in axis.
-template <typename T>
-inline bool ReduceMax(const T* input_data, const int* input_dims,
-                      const int input_num_dims, T* output_data,
-                      const int* output_dims, const int output_num_dims,
-                      const int* axis, const int64_t num_axis_dimensions,
-                      bool keep_dims, int* temp_index, int* resolved_axis) {
-  T init_value = std::numeric_limits<T>::lowest();
+inline bool ReduceGeneric(const T* input_data, const int* input_dims,
+                          const int input_num_dims, T* output_data,
+                          const int* output_dims, const int output_num_dims,
+                          const int* axis, const int64_t num_axis_dimensions,
+                          bool keep_dims, int* temp_index, int* resolved_axis,
+                          T init_value,
+                          T reducer(const T current, const T in)) {
   // Reset output data.
   if (!InitTensorDataForReduce(output_dims, output_num_dims, init_value,
                                output_data)) {
@@ -3942,12 +3889,61 @@ inline bool ReduceMax(const T* input_data, const int* input_dims,
     return false;
   }
 
-  auto reducer = [](const T current, const T in) -> T {
-    return (in > current) ? in : current;
-  };
   return Reduce<T, T>(input_data, input_dims, output_dims, input_num_dims,
                       output_num_dims, resolved_axis, num_resolved_axis,
                       temp_index, reducer, output_data);
+}
+
+// Computes the sum of elements across dimensions given in axis.
+template <typename T>
+inline bool Sum(const T* input_data, const int* input_dims,
+                const int input_num_dims, T* output_data,
+                const int* output_dims, const int output_num_dims,
+                const int* axis, const int num_axis_dimensions, bool keep_dims,
+                int* temp_index, int* resolved_axis) {
+  T init_value = static_cast<T>(0);
+
+  auto reducer = [](const T current, const T in) -> T { return current + in; };
+  return ReduceGeneric<T>(input_data, input_dims, input_num_dims, output_data,
+                          output_dims, output_num_dims, axis,
+                          num_axis_dimensions, keep_dims, temp_index,
+                          resolved_axis, init_value, reducer);
+}
+
+// Computes the max of elements across dimensions given in axis.
+template <typename T>
+inline bool ReduceMax(const T* input_data, const int* input_dims,
+                      const int input_num_dims, T* output_data,
+                      const int* output_dims, const int output_num_dims,
+                      const int* axis, const int64_t num_axis_dimensions,
+                      bool keep_dims, int* temp_index, int* resolved_axis) {
+  T init_value = std::numeric_limits<T>::lowest();
+
+  auto reducer = [](const T current, const T in) -> T {
+    return (in > current) ? in : current;
+  };
+  return ReduceGeneric<T>(input_data, input_dims, input_num_dims, output_data,
+                          output_dims, output_num_dims, axis,
+                          num_axis_dimensions, keep_dims, temp_index,
+                          resolved_axis, init_value, reducer);
+}
+
+// Computes the min of elements across dimensions given in axis.
+template <typename T>
+inline bool ReduceMin(const T* input_data, const int* input_dims,
+                      const int input_num_dims, T* output_data,
+                      const int* output_dims, const int output_num_dims,
+                      const int* axis, const int64_t num_axis_dimensions,
+                      bool keep_dims, int* temp_index, int* resolved_axis) {
+  T init_value = std::numeric_limits<T>::max();
+
+  auto reducer = [](const T current, const T in) -> T {
+    return (in < current) ? in : current;
+  };
+  return ReduceGeneric<T>(input_data, input_dims, input_num_dims, output_data,
+                          output_dims, output_num_dims, axis,
+                          num_axis_dimensions, keep_dims, temp_index,
+                          resolved_axis, init_value, reducer);
 }
 
 // Computes the prod of elements across dimensions given in axis.
@@ -3957,23 +3953,13 @@ inline bool ReduceProd(const T* input_data, const int* input_dims,
                        const int* output_dims, const int output_num_dims,
                        const int* axis, const int64_t num_axis_dimensions,
                        bool keep_dims, int* temp_index, int* resolved_axis) {
-  // Reset output data.
-  if (!InitTensorDataForReduce(output_dims, output_num_dims, static_cast<T>(1),
-                               output_data)) {
-    return false;
-  }
-
-  // Resolve axis.
-  int num_resolved_axis = 0;
-  if (!ResolveAxis(input_num_dims, axis, num_axis_dimensions, resolved_axis,
-                   &num_resolved_axis)) {
-    return false;
-  }
+  T init_value = static_cast<T>(1);
 
   auto reducer = [](const T current, const T in) -> T { return in * current; };
-  return Reduce<T, T>(input_data, input_dims, output_dims, input_num_dims,
-                      output_num_dims, resolved_axis, num_resolved_axis,
-                      temp_index, reducer, output_data);
+  return ReduceGeneric<T>(input_data, input_dims, input_num_dims, output_data,
+                          output_dims, output_num_dims, axis,
+                          num_axis_dimensions, keep_dims, temp_index,
+                          resolved_axis, init_value, reducer);
 }
 
 // Computes the mean of elements across dimensions given in axis.

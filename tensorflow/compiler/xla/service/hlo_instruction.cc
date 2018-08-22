@@ -22,6 +22,7 @@ limitations under the License.
 #include <utility>
 
 #include "absl/algorithm/container.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/memory/memory.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
@@ -295,7 +296,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       TF_RET_CHECK(proto.called_computation_ids_size() == 1)
           << "CrossReplicaSum should have 1 called computation but sees "
           << proto.called_computation_ids_size();
-      tensorflow::gtl::optional<int64> all_reduce_id;
+      absl::optional<int64> all_reduce_id;
       if (proto.all_reduce_id() > 0) {
         all_reduce_id = proto.all_reduce_id();
       }
@@ -361,11 +362,6 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
             ->set_convolution_dimension_numbers(
                 proto.convolution_dimension_numbers());
       }
-      break;
-    case HloOpcode::kHostCompute:
-      instruction =
-          CreateHostCompute(proto.shape(), all_operands(), proto.channel_name(),
-                            proto.cost_estimate_ns());
       break;
     case HloOpcode::kPad:
       TF_RET_CHECK(proto.operand_ids_size() == 2)
@@ -448,6 +444,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
   instruction->SetAndSanitizeName(proto.name());
   instruction->metadata_ = proto.metadata();
   instruction->backend_config_ = proto.backend_config();
+  instruction->precision_config_ = proto.precision_config();
 
   if (proto.has_dot_dimension_numbers()) {
     instruction->dot_dimension_numbers_ =
@@ -670,7 +667,7 @@ HloInstruction::CreateCrossReplicaSum(
     HloComputation* reduce_computation,
     tensorflow::gtl::ArraySlice<int64> replica_group_ids,
     tensorflow::StringPiece barrier,
-    const tensorflow::gtl::optional<int64>& all_reduce_id) {
+    const absl::optional<int64>& all_reduce_id) {
   return absl::make_unique<HloAllReduceInstruction>(
       shape, operands, reduce_computation, replica_group_ids, barrier,
       all_reduce_id);
@@ -1023,6 +1020,7 @@ void HloInstruction::SetupDerivedInstruction(
     derived_instruction->clear_sharding();
   }
   derived_instruction->set_metadata(metadata_);
+  derived_instruction->set_precision_config(precision_config_);
 }
 
 bool HloInstruction::HasSideEffectNoRecurse() const {
@@ -1035,7 +1033,6 @@ bool HloInstruction::HasSideEffectNoRecurse() const {
     case HloOpcode::kInfeed:
     case HloOpcode::kOutfeed:
     case HloOpcode::kTrace:
-    case HloOpcode::kHostCompute:
       return true;
     case HloOpcode::kCrossReplicaSum:
       return all_reduce_id().has_value();
@@ -1074,13 +1071,6 @@ bool HloInstruction::HasSideEffect() const {
     tensorflow::StringPiece custom_call_target) {
   return absl::make_unique<HloCustomCallInstruction>(shape, operands,
                                                      custom_call_target);
-}
-
-/* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateHostCompute(
-    const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
-    tensorflow::StringPiece channel_name, const int64 cost_estimate_ns) {
-  return absl::make_unique<HloHostComputeInstruction>(
-      shape, operands, channel_name, cost_estimate_ns);
 }
 
 /* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateTuple(
@@ -1170,7 +1160,6 @@ std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
     case HloOpcode::kCustomCall:
     case HloOpcode::kReduceWindow:
     case HloOpcode::kSelectAndScatter:
-    case HloOpcode::kHostCompute:
     case HloOpcode::kPad:
     case HloOpcode::kDynamicSlice:
     case HloOpcode::kSort:
@@ -1292,6 +1281,7 @@ std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
       }
       break;
   }
+  // SetupDerivedInstruction will setup the precision_config_ field.
   SetupDerivedInstruction(clone.get());
   clone->set_parent(parent_);
   clone->set_raw_backend_config_string(backend_config_);
@@ -1636,7 +1626,6 @@ bool HloInstruction::IdenticalSlowPath(
     case HloOpcode::kCustomCall:
     case HloOpcode::kReduceWindow:
     case HloOpcode::kSelectAndScatter:
-    case HloOpcode::kHostCompute:
     case HloOpcode::kPad:
     case HloOpcode::kDynamicSlice:
     case HloOpcode::kGather:
@@ -1850,7 +1839,7 @@ string HloInstruction::ToString(const HloPrintOptions& options) const {
 }
 
 bool HloInstruction::IsElementwiseImpl(
-    const tensorflow::gtl::optional<int64>& operand_idx) const {
+    const absl::optional<int64>& operand_idx) const {
   switch (opcode_) {
     // Unary elementwise operations.
     case HloOpcode::kAbs:
@@ -2014,6 +2003,11 @@ std::vector<string> HloInstruction::ExtraAttributesToString(
     extra.push_back(DotDimensionNumbersToString());
   }
 
+  string precision_config_string = PrecisionConfigToString();
+  if (!precision_config_string.empty()) {
+    extra.push_back(precision_config_string);
+  }
+
   if (options.print_subcomputation_mode() ==
       HloPrintOptions::PrintSubcomputationMode::kNameOnly) {
     if (opcode() == HloOpcode::kWhile) {
@@ -2135,6 +2129,7 @@ HloInstructionProto HloInstruction::ToProto() const {
 
   *proto.mutable_metadata() = metadata_;
   proto.set_backend_config(backend_config_);
+  *proto.mutable_precision_config() = precision_config_;
   if (opcode() != HloOpcode::kFusion) {
     for (const HloComputation* computation : called_computations_) {
       proto.add_called_computation_ids(computation->unique_id());
@@ -2347,8 +2342,6 @@ Status HloInstruction::Visit(DfsHloVisitorBase<HloInstructionPtr>* visitor) {
       return visitor->HandleInfeed(this);
     case HloOpcode::kOutfeed:
       return visitor->HandleOutfeed(this);
-    case HloOpcode::kHostCompute:
-      return visitor->HandleHostCompute(this);
     case HloOpcode::kRng:
       return visitor->HandleRng(this);
     case HloOpcode::kWhile:
@@ -2394,8 +2387,7 @@ Status HloInstruction::Visit(DfsHloVisitorBase<HloInstructionPtr>* visitor) {
 template Status HloInstruction::Visit(DfsHloVisitor* visitor);
 template Status HloInstruction::Visit(ConstDfsHloVisitor* visitor);
 
-using DFSStack =
-    tensorflow::gtl::InlinedVector<std::pair<int, HloInstruction*>, 16>;
+using DFSStack = absl::InlinedVector<std::pair<int, HloInstruction*>, 16>;
 
 // Push "child" onto the dfs_stack if not already visited.  Returns false if a
 // cycle was detected, and true otherwise.
@@ -2640,7 +2632,7 @@ bool HloInstruction::IsElementwiseBinary() const {
 }
 
 bool HloInstruction::IsElementwise() const {
-  return IsElementwiseImpl(tensorflow::gtl::nullopt);
+  return IsElementwiseImpl(absl::nullopt);
 }
 
 bool HloInstruction::ImplicitlyBroadcastsOperand(int64 operand_idx) const {
@@ -2836,6 +2828,11 @@ string RandomDistributionToString(const RandomDistribution& distribution) {
   return tensorflow::str_util::Lowercase(RandomDistribution_Name(distribution));
 }
 
+string PrecisionToString(const PrecisionConfigProto::Precision& precision) {
+  return tensorflow::str_util::Lowercase(
+      PrecisionConfigProto::Precision_Name(precision));
+}
+
 string ConvolutionDimensionNumbersToString(
     const ConvolutionDimensionNumbers& dnums) {
   // lhs_dims[i] is the symbol of the logical dimension i for the lhs
@@ -2895,6 +2892,44 @@ StatusOr<RandomDistribution> StringToRandomDistribution(const string& name) {
       if (RandomDistribution_IsValid(i)) {
         auto value = static_cast<RandomDistribution>(i);
         (*map)[RandomDistributionToString(value)] = value;
+      }
+    }
+    return map;
+  }();
+  auto found = map->find(tensorflow::str_util::Lowercase(name));
+  if (found == map->end()) {
+    return InvalidArgument("Unknown distribution");
+  }
+  return found->second;
+}
+
+string HloInstruction::PrecisionConfigToString() const {
+  if (precision_config_.operand_precision().empty()) {
+    return "";
+  }
+  return StrCat(
+      "operand_precision={",
+      Join(precision_config_.operand_precision(), ",",
+           [](string* out, int32 precision) {
+             CHECK(PrecisionConfigProto::Precision_IsValid(precision))
+                 << precision;
+             StrAppend(
+                 out,
+                 PrecisionToString(
+                     static_cast<PrecisionConfigProto::Precision>(precision)));
+           }),
+      "}");
+}
+
+StatusOr<PrecisionConfigProto::Precision> StringToPrecision(
+    const string& name) {
+  static std::unordered_map<string, PrecisionConfigProto::Precision>* map = [] {
+    static auto* map =
+        new std::unordered_map<string, PrecisionConfigProto::Precision>;
+    for (int i = 0; i < PrecisionConfigProto::Precision_ARRAYSIZE; i++) {
+      if (PrecisionConfigProto::Precision_IsValid(i)) {
+        auto value = static_cast<PrecisionConfigProto::Precision>(i);
+        (*map)[PrecisionToString(value)] = value;
       }
     }
     return map;
@@ -3173,7 +3208,7 @@ void HloInstruction::set_cross_replica_sum_barrier(const string& barrier) {
       barrier);
 }
 
-tensorflow::gtl::optional<int64> HloInstruction::all_reduce_id() const {
+absl::optional<int64> HloInstruction::all_reduce_id() const {
   return Cast<HloAllReduceInstruction>(this)->all_reduce_id();
 }
 
@@ -3221,10 +3256,6 @@ void HloInstruction::set_scatter(HloComputation* computation) {
 
 const string& HloInstruction::custom_call_target() const {
   return Cast<HloCustomCallInstruction>(this)->custom_call_target();
-}
-
-const string& HloInstruction::channel_name() const {
-  return Cast<HloHostComputeInstruction>(this)->channel_name();
 }
 
 const PaddingConfig& HloInstruction::padding_config() const {

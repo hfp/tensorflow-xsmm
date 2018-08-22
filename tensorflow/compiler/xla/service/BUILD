@@ -239,7 +239,9 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -316,6 +318,7 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/memory",
     ],
 )
@@ -396,6 +399,7 @@ cc_library(
         "//tensorflow/compiler/xla/service:hlo_parser",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1089,6 +1093,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/core:lib",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1246,6 +1251,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1324,6 +1330,7 @@ cc_library(
         "//tensorflow/core:lib",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1475,8 +1482,7 @@ cc_library(
     deps = [
         ":hlo",
         ":hlo_evaluator",
-        "//tensorflow/compiler/xla:literal",
-        "//tensorflow/core:lib",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1491,6 +1497,7 @@ cc_library(
         ":while_loop_analysis",
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -1927,6 +1934,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/memory",
     ],
 )
@@ -2083,6 +2091,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/memory",
     ],
 )
@@ -2262,13 +2271,13 @@ cc_library(
         ":hlo_scheduling",
         ":logical_buffer",
         ":tuple_points_to_analysis",
-        ":tuple_simplifier",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:status_macros",
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:types",
         "//tensorflow/compiler/xla:util",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/container:inlined_vector",
     ],
 )
 
@@ -2456,6 +2465,7 @@ tf_cc_test(
         ":hlo",
         ":hlo_constant_folding",
         ":hlo_matchers",
+        ":hlo_parser",
         ":hlo_pass",
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:shape_util",
@@ -2658,6 +2668,7 @@ cc_library(
         "//tensorflow/compiler/xla:xla_proto",
         "//tensorflow/core:lib",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -2741,6 +2752,7 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:regexp_internal",
+        "@com_google_absl//absl/types:optional",
     ],
     alwayslink = 1,
 )
@@ -3017,6 +3029,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/core:lib",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
     ],
 )
 
@@ -3100,6 +3113,8 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:ptr_util",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -3143,6 +3158,7 @@ tf_cc_test(
     size = "small",
     srcs = ["hlo_parser_test.cc"],
     deps = [
+        ":hlo_matchers",
         ":hlo_parser",
         "//tensorflow/compiler/xla:window_util",
         "//tensorflow/core:lib",
@@ -3166,6 +3182,7 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:lib",
         "//tensorflow/core:regexp_internal",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 

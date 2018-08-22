@@ -301,8 +301,7 @@ HloAllReduceInstruction::HloAllReduceInstruction(
     const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
     HloComputation* reduce_computation,
     tensorflow::gtl::ArraySlice<int64> replica_group_ids,
-    tensorflow::StringPiece barrier,
-    const tensorflow::gtl::optional<int64>& all_reduce_id)
+    tensorflow::StringPiece barrier, const absl::optional<int64>& all_reduce_id)
     : HloInstruction(HloOpcode::kCrossReplicaSum, shape),
       replica_group_ids_(replica_group_ids.begin(), replica_group_ids.end()),
       cross_replica_sum_barrier_(barrier.begin(), barrier.end()),
@@ -702,7 +701,7 @@ HloInstructionProto HloMapInstruction::ToProto() const {
 }
 
 bool HloMapInstruction::IsElementwiseImpl(
-    const tensorflow::gtl::optional<int64>& operand_idx) const {
+    const absl::optional<int64>& operand_idx) const {
   if (!dimensions().empty()) {
     // Check that the map is executed in elementwise compatible dimensions.
     if (dimensions().size() != shape().dimensions_size()) {
@@ -815,7 +814,7 @@ HloInstructionProto HloConstantInstruction::ToProto() const {
 }
 
 bool HloConstantInstruction::IsElementwiseImpl(
-    const tensorflow::gtl::optional<int64>& operand_idx) const {
+    const absl::optional<int64>& operand_idx) const {
   return true;
 }
 
@@ -955,7 +954,7 @@ HloInstructionProto HloFusionInstruction::ToProto() const {
 }
 
 bool HloFusionInstruction::IsElementwiseImpl(
-    const tensorflow::gtl::optional<int64>& operand_idx) const {
+    const absl::optional<int64>& operand_idx) const {
   if (!operand_idx.has_value()) {
     for (auto* fused : fused_instructions()) {
       if (fused->opcode() != HloOpcode::kParameter && !fused->IsElementwise()) {
@@ -1387,7 +1386,7 @@ std::vector<string> HloRngInstruction::ExtraAttributesToStringImpl(
 }
 
 bool HloRngInstruction::IsElementwiseImpl(
-    const tensorflow::gtl::optional<int64>& operand_idx) const {
+    const absl::optional<int64>& operand_idx) const {
   return true;
 }
 
@@ -1854,41 +1853,6 @@ HloCustomCallInstruction::CloneWithNewOperandsImpl(
     cloned->set_convolution_dimension_numbers(*convolution_dimension_numbers_);
   }
   return std::move(cloned);
-}
-
-HloHostComputeInstruction::HloHostComputeInstruction(
-    const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
-    tensorflow::StringPiece channel_name, const int64 cost_estimate_ns)
-    : HloInstruction(HloOpcode::kHostCompute, shape),
-      channel_name_(channel_name.begin(), channel_name.end()),
-      cost_estimate_ns_(cost_estimate_ns) {
-  for (auto operand : operands) {
-    AppendOperand(operand);
-  }
-}
-
-HloInstructionProto HloHostComputeInstruction::ToProto() const {
-  HloInstructionProto proto = HloInstruction::ToProto();
-  proto.set_channel_name(channel_name_);
-  proto.set_cost_estimate_ns(cost_estimate_ns_);
-  return proto;
-}
-
-bool HloHostComputeInstruction::IdenticalSlowPath(
-    const HloInstruction& other,
-    const std::function<bool(const HloComputation*, const HloComputation*)>&
-        eq_computations) const {
-  // Not yet supported.
-  return false;
-}
-
-std::unique_ptr<HloInstruction>
-HloHostComputeInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape,
-    tensorflow::gtl::ArraySlice<HloInstruction*> new_operands,
-    HloCloneContext* context) const {
-  return absl::make_unique<HloHostComputeInstruction>(
-      shape, new_operands, channel_name_, cost_estimate_ns_);
 }
 
 HloPadInstruction::HloPadInstruction(const Shape& shape,

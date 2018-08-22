@@ -143,6 +143,7 @@ py_library(
         "//tensorflow/python/profiler",
         "//tensorflow/python/saved_model",
         "//tensorflow/python/tools:component_api_helper",
+        "//tensorflow/python/tools/api/generator:create_python_api",
         "//third_party/py/numpy",
     ],
 )
@@ -2610,6 +2611,17 @@ py_library(
         ":sparse_ops_gen",
         ":util",
         "//third_party/py/numpy",
+    ],
+)
+
+py_test(
+    name = "sparse_ops_test",
+    srcs = ["ops/sparse_ops_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":constant_op",
+        ":framework_test_lib",
+        ":sparse_ops",
     ],
 )
 
