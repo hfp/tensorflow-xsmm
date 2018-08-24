@@ -218,19 +218,37 @@ class HloRecvDoneInstruction : public HloSendRecvInstruction {
       HloCloneContext* context) const override;
 };
 
-class HloAllReduceInstruction : public HloInstruction {
+class HloCollectiveInstruction : public HloInstruction {
+ public:
+  const std::vector<ReplicaGroup>& replica_groups() const {
+    return replica_groups_;
+  }
+
+ protected:
+  explicit HloCollectiveInstruction(
+      HloOpcode opcode, const Shape& shape,
+      tensorflow::gtl::ArraySlice<HloInstruction*> operands,
+      const std::vector<ReplicaGroup>& replica_groups);
+
+  HloInstructionProto ToProto() const override;
+
+  std::vector<string> ExtraAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      const std::function<bool(const HloComputation*, const HloComputation*)>&
+          eq_computations) const override;
+
+  std::vector<ReplicaGroup> replica_groups_;
+};
+
+class HloAllReduceInstruction : public HloCollectiveInstruction {
  public:
   explicit HloAllReduceInstruction(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
       HloComputation* reduce_computation,
-      tensorflow::gtl::ArraySlice<int64> replica_group_ids,
-      tensorflow::StringPiece barrier,
-      const absl::optional<int64>& all_reduce_id);
-
-  // Returns the group ids of each replica for CrossReplicaSum op.
-  const std::vector<int64>& replica_group_ids() const {
-    return replica_group_ids_;
-  }
+      const std::vector<ReplicaGroup>& replica_groups,
+      absl::string_view barrier, const absl::optional<int64>& all_reduce_id);
 
   // Returns the barrier config used for the CrossReplicaSum implementation of
   // each backend.
@@ -260,9 +278,6 @@ class HloAllReduceInstruction : public HloInstruction {
       tensorflow::gtl::ArraySlice<HloInstruction*> new_operands,
       HloCloneContext* context) const override;
 
-  // The group id of each replica for CrossReplicaSum.
-  std::vector<int64> replica_group_ids_;
-
   // The string representation of the barrier config used for CrossReplicaSum.
   string cross_replica_sum_barrier_;
 
@@ -272,45 +287,18 @@ class HloAllReduceInstruction : public HloInstruction {
   absl::optional<int64> all_reduce_id_;
 };
 
-class HloAllToAllInstruction : public HloInstruction {
+class HloAllToAllInstruction : public HloCollectiveInstruction {
  public:
   explicit HloAllToAllInstruction(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operand,
-      const std::vector<ReplicaGroup>& replica_groups,
-      tensorflow::StringPiece barrier);
-
-  const std::vector<ReplicaGroup>& replica_groups() const {
-    return replica_groups_;
-  }
-
-  // TODO(b/110096724): rename this.
-  void set_cross_replica_sum_barrier(string barrier) {
-    cross_replica_sum_barrier_ = barrier;
-  }
-  string cross_replica_sum_barrier() const {
-    return cross_replica_sum_barrier_;
-  }
-
-  HloInstructionProto ToProto() const override;
+      const std::vector<ReplicaGroup>& replica_groups);
 
  private:
-  std::vector<string> ExtraAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
-  bool IdenticalSlowPath(
-      const HloInstruction& other,
-      const std::function<bool(const HloComputation*, const HloComputation*)>&
-          eq_computations) const override;
-
   // Implementation for non-common logic of CloneWithNewOperands.
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape,
       tensorflow::gtl::ArraySlice<HloInstruction*> new_operands,
       HloCloneContext* context) const override;
-
-  std::vector<ReplicaGroup> replica_groups_;
-
-  // The string representation of the barrier config.
-  string cross_replica_sum_barrier_;
 };
 
 class HloReverseInstruction : public HloInstruction {
@@ -919,7 +907,7 @@ class HloOutfeedInstruction : public HloInstruction {
   explicit HloOutfeedInstruction(const Shape& outfeed_shape,
                                  HloInstruction* operand,
                                  HloInstruction* token_operand,
-                                 tensorflow::StringPiece outfeed_config);
+                                 absl::string_view outfeed_config);
   // Returns the shape for the Outfeed instruction.
   const Shape& outfeed_shape() const {
     TF_DCHECK_OK(ShapeUtil::ValidateShapeWithOptionalLayout(outfeed_shape_));
@@ -1072,7 +1060,7 @@ class HloCustomCallInstruction : public HloInstruction {
  public:
   explicit HloCustomCallInstruction(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
-      tensorflow::StringPiece custom_call_target);
+      absl::string_view custom_call_target);
   const Window& window() const override {
     CHECK(window_ != nullptr);
     return *window_;

@@ -23,6 +23,9 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "tensorflow/compiler/xla/client/sharding_builder.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
 #include "tensorflow/compiler/xla/execution_options_util.h"
@@ -31,12 +34,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/shape_inference.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/gtl/flatset.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/mutex.h"
 
 namespace xla {
 
-using tensorflow::strings::StrCat;
+using absl::StrCat;
 
 namespace {
 
@@ -223,8 +225,7 @@ XlaComputation XlaBuilder::BuildAndNoteError() {
   auto build_status = Build();
   if (!build_status.ok()) {
     parent_builder_->ReportError(
-        AddStatus(build_status.status(),
-                  tensorflow::strings::StrCat("error from: ", name_)));
+        AddStatus(build_status.status(), absl::StrCat("error from: ", name_)));
     return {};
   }
   return build_status.ConsumeValueOrDie();
@@ -705,8 +706,7 @@ XlaOp XlaBuilder::Collapse(const XlaOp& operand,
     TF_ASSIGN_OR_RETURN(const Shape& original_shape, GetShape(operand));
 
     VLOG(3) << "original shape: " << ShapeUtil::HumanString(original_shape);
-    VLOG(3) << "dims to collapse: "
-            << tensorflow::str_util::Join(dimensions, ",");
+    VLOG(3) << "dims to collapse: " << absl::StrJoin(dimensions, ",");
 
     std::vector<int64> new_sizes;
     for (int i = 0; i < ShapeUtil::Rank(original_shape); ++i) {
@@ -717,8 +717,7 @@ XlaOp XlaBuilder::Collapse(const XlaOp& operand,
       }
     }
 
-    VLOG(3) << "new sizes: [" << tensorflow::str_util::Join(new_sizes, ",")
-            << "]";
+    VLOG(3) << "new sizes: [" << absl::StrJoin(new_sizes, ",") << "]";
 
     return Reshape(operand, new_sizes);
   });
@@ -1013,7 +1012,7 @@ StatusOr<Window> XlaBuilder::MakeWindow(
       return Status::OK();
     } else {
       return InvalidArgument(
-          "%s", tensorflow::strings::StrCat(
+          "%s", absl::StrCat(
                     "Window has different number of window dimensions than of ",
                     x_name,
                     "\nNumber of window dimensions: ", window_dimensions.size(),
@@ -1283,7 +1282,7 @@ XlaOp XlaBuilder::CustomCall(const string& call_target_name,
                              const Shape& shape) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
     HloInstructionProto instr;
-    if (tensorflow::str_util::StartsWith(call_target_name, "$")) {
+    if (absl::StartsWith(call_target_name, "$")) {
       return InvalidArgument(
           "Invalid custom_call_target \"%s\": Call targets that start with '$' "
           "are reserved for internal use.",
@@ -1881,7 +1880,7 @@ XlaOp XlaBuilder::BatchNormGrad(const XlaOp& operand, const XlaOp& scale,
 
 XlaOp XlaBuilder::CrossReplicaSum(
     const XlaOp& operand,
-    tensorflow::gtl::ArraySlice<int64> replica_group_ids) {
+    tensorflow::gtl::ArraySlice<ReplicaGroup> replica_groups) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
     TF_ASSIGN_OR_RETURN(const Shape& shape, GetShape(operand));
     const Shape& scalar_shape = ShapeUtil::MakeShape(shape.element_type(), {});
@@ -1889,14 +1888,14 @@ XlaOp XlaBuilder::CrossReplicaSum(
     b->Add(b->Parameter(/*parameter_number=*/0, scalar_shape, "x"),
            b->Parameter(/*parameter_number=*/1, scalar_shape, "y"));
     TF_ASSIGN_OR_RETURN(auto computation, b->Build());
-    return CrossReplicaSum(operand, computation, replica_group_ids,
+    return CrossReplicaSum(operand, computation, replica_groups,
                            /*channel_id=*/absl::nullopt);
   });
 }
 
 XlaOp XlaBuilder::CrossReplicaSum(
     const XlaOp& operand, const XlaComputation& computation,
-    tensorflow::gtl::ArraySlice<int64> replica_group_ids,
+    tensorflow::gtl::ArraySlice<ReplicaGroup> replica_groups,
     const absl::optional<ChannelHandle>& channel_id) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
     HloInstructionProto instr;
@@ -1904,8 +1903,9 @@ XlaOp XlaBuilder::CrossReplicaSum(
     TF_ASSIGN_OR_RETURN(
         *instr.mutable_shape(),
         ShapeInference::InferCrossReplicaSumShape({&operand_shape}));
-    for (int64 replica_group_id : replica_group_ids) {
-      instr.add_replica_group_ids(replica_group_id);
+
+    for (const ReplicaGroup& group : replica_groups) {
+      *instr.add_replica_groups() = group;
     }
 
     if (channel_id.has_value()) {
@@ -2767,16 +2767,17 @@ XlaOp ReduceWindowWithGeneralPadding(
       padding);
 }
 
-XlaOp CrossReplicaSum(const XlaOp& operand,
-                      tensorflow::gtl::ArraySlice<int64> replica_group_ids) {
-  return operand.builder()->CrossReplicaSum(operand, replica_group_ids);
+XlaOp CrossReplicaSum(
+    const XlaOp& operand,
+    tensorflow::gtl::ArraySlice<ReplicaGroup> replica_groups) {
+  return operand.builder()->CrossReplicaSum(operand, replica_groups);
 }
 
 XlaOp CrossReplicaSum(const XlaOp& operand, const XlaComputation& computation,
-                      tensorflow::gtl::ArraySlice<int64> replica_group_ids,
+                      tensorflow::gtl::ArraySlice<ReplicaGroup> replica_groups,
                       const absl::optional<ChannelHandle>& channel_id) {
   return operand.builder()->CrossReplicaSum(operand, computation,
-                                            replica_group_ids, channel_id);
+                                            replica_groups, channel_id);
 }
 
 XlaOp AllToAll(const XlaOp& operand, int64 split_dimension,

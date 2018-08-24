@@ -34,6 +34,8 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "tensorflow/compiler/xla/iterator_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/map_util.h"
@@ -47,7 +49,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/lib/core/stringpiece.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/gtl/flatmap.h"
 #include "tensorflow/core/lib/gtl/iterator_range.h"
@@ -222,7 +223,7 @@ class CanonicalNameMap {
       return iter->second;
     }
 
-    string new_name = tensorflow::strings::StrCat("tmp_", index++);
+    string new_name = absl::StrCat("tmp_", index++);
     canonical_name_map[old_name] = new_name;
     return new_name;
   }
@@ -435,9 +436,10 @@ class HloInstruction {
   //
   // `reduction_computation`: the reduction function.
   //
-  // `replica_group_ids`: maps replica ids to subgroup ids. If empty, all
-  // replicas belong to one group. Allreduce will be applied within subgroups.
-  // For example, we have 4 replicas, then replica_group_ids={0,1,0,1} means,
+  // `replica_groups`: each ReplicaGroup contains a list of replica id. If
+  // empty, all replicas belong to one group in the order of 0 - (n-1).
+  // Allreduce will be applied within subgroups.
+  // For example, we have 4 replicas, then replica_groups={{0,2},{1,3}} means,
   // replica 0 and 2 are in subgroup 0, replica 1 and 3 are in subgroup 1.
   //
   // `all_reduce_id`: for Allreduce nodes from different modules, if they have
@@ -448,9 +450,8 @@ class HloInstruction {
   static std::unique_ptr<HloInstruction> CreateCrossReplicaSum(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
       HloComputation* reduce_computation,
-      tensorflow::gtl::ArraySlice<int64> replica_group_ids,
-      tensorflow::StringPiece barrier,
-      const absl::optional<int64>& all_reduce_id);
+      const std::vector<ReplicaGroup>& replica_groups,
+      absl::string_view barrier, const absl::optional<int64>& all_reduce_id);
 
   // This op handles the communication of an Alltoall operation. On each core,
   // the operands are N ops in the same shape, where N is the number of cores
@@ -465,12 +466,9 @@ class HloInstruction {
   // within replica 1, 2, 3, and in the gather phase, the received blocks will
   // be concatenated in the order of 1, 2, 3; another Alltoall will be applied
   // within replica 4, 5, 0, and the concatenation order is 4, 5, 0.
-  //
-  // TODO(b/110096724): This is NOT YET ready to use.
   static std::unique_ptr<HloInstruction> CreateAllToAll(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
-      const std::vector<ReplicaGroup>& replica_groups,
-      tensorflow::StringPiece barrier);
+      const std::vector<ReplicaGroup>& replica_groups);
 
   // Creates a conversion instruction, where operand is the data to convert and
   // shape is the target shape for the conversion.
@@ -495,7 +493,7 @@ class HloInstruction {
   // which is a TOKEN.
   static std::unique_ptr<HloInstruction> CreateOutfeed(
       const Shape& outfeed_shape, HloInstruction* operand,
-      HloInstruction* token_operand, tensorflow::StringPiece outfeed_config);
+      HloInstruction* token_operand, absl::string_view outfeed_config);
 
   // Creates an asynchronous send instruction with the given channel id, which
   // initiates sending the operand data to a unique receive instruction in
@@ -708,7 +706,7 @@ class HloInstruction {
   // to the given operands. "shape" is the resultant shape.
   static std::unique_ptr<HloInstruction> CreateCustomCall(
       const Shape& shape, tensorflow::gtl::ArraySlice<HloInstruction*> operands,
-      tensorflow::StringPiece custom_call_target);
+      absl::string_view custom_call_target);
 
   // Creates a tuple instruction with the given elements. This is a convenience
   // wrapper around CreateVariadic.
@@ -1039,6 +1037,8 @@ class HloInstruction {
     CHECK(has_sharding());
     return *sharding_;
   }
+  std::shared_ptr<const HloSharding> sharding_ptr() const { return sharding_; }
+
   // Returns the sharding applied to this operator, or default_ if none exists.
   const HloSharding& sharding_or_default(const HloSharding& default_) const {
     return sharding_ ? *sharding_ : default_;
@@ -1053,7 +1053,10 @@ class HloInstruction {
   // Sets the sharding of this operator. Should only be called by HloModule or
   // HloComputation methods.
   void set_sharding(const HloSharding& sharding) {
-    sharding_ = absl::make_unique<HloSharding>(sharding);
+    sharding_ = std::make_shared<const HloSharding>(sharding);
+  }
+  void set_sharding(std::shared_ptr<const HloSharding> sharding) {
+    sharding_ = std::move(sharding);
   }
   void set_single_sharding(const HloSharding& sharding);
   // Sets a sharding that assigns the current instruction to device.
@@ -1439,9 +1442,6 @@ class HloInstruction {
   // Returns the shape for the Outfeed instruction.
   const Shape& outfeed_shape() const;
 
-  // Delegates to HloAllReduceInstruction::replica_group_ids.
-  const std::vector<int64>& replica_group_ids() const;
-
   // Delegates to HloAllToAllInstruction::replica_groups.
   const std::vector<ReplicaGroup>& replica_groups() const;
 
@@ -1657,7 +1657,10 @@ class HloInstruction {
   bool copy_elision_allowed_ = true;
 
   // The sharding, if one exists.
-  std::unique_ptr<HloSharding> sharding_;
+  // Uses std::shared_ptr to allow reuse of the same sharding object between
+  // HloInstructions and other components as HloSharding can be very large for
+  // many element tuples.
+  std::shared_ptr<const HloSharding> sharding_;
 
   // Fields used by the kDomain instruction.
   std::unique_ptr<DomainMetadata> operand_side_metadata_;

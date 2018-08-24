@@ -25,6 +25,9 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/map_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
@@ -37,13 +40,11 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/flatset.h"
-#include "tensorflow/core/lib/strings/str_util.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/logging.h"
 
 namespace xla {
 
-using ::tensorflow::strings::StrCat;
+using absl::StrCat;
 
 std::unique_ptr<HloComputation> HloComputation::Builder::Build(
     HloInstruction* root_instruction) {
@@ -136,7 +137,7 @@ string RenameFusionParameter(const string& original_name, int64 new_param_no) {
   }
   string after_param = original_name.substr(index + param_underscore.size());
   int64 numeric_suffix;
-  if (tensorflow::strings::safe_strto64(after_param, &numeric_suffix)) {
+  if (absl::SimpleAtoi(after_param, &numeric_suffix)) {
     return StrCat(original_name.substr(0, index + param_underscore.size()),
                   new_param_no);
   }
@@ -682,6 +683,9 @@ ProgramShape HloComputation::ComputeProgramShape() const {
 }
 
 bool HloComputation::operator==(const HloComputation& other) const {
+  if (this == &other) {
+    return true;
+  }
   std::set<std::pair<const HloInstruction*, const HloInstruction*>> visited;
   std::function<bool(const HloInstruction*, const HloInstruction*)> eq =
       [&visited, &eq](const HloInstruction* a, const HloInstruction* b) {
@@ -802,11 +806,10 @@ std::vector<HloInstruction*> HloComputation::CollectUnreachableRoots() const {
     }
   }
   VLOG(3) << "Unreachable roots:"
-          << tensorflow::str_util::Join(
-                 unreachable_roots, "\n\t",
-                 [](string* out, const HloInstruction* hlo) {
-                   tensorflow::strings::StrAppend(out, hlo->ToString());
-                 });
+          << absl::StrJoin(unreachable_roots, "\n\t",
+                           [](string* out, const HloInstruction* hlo) {
+                             absl::StrAppend(out, hlo->ToString());
+                           });
   return unreachable_roots;
 }
 
@@ -977,8 +980,7 @@ void HloComputation::UniquifyName(NameUniquer* name_uniquer) {
   name_ = name_uniquer->GetUniqueName(name_);
 }
 
-HloInstruction* HloComputation::GetInstructionWithName(
-    tensorflow::StringPiece name) {
+HloInstruction* HloComputation::GetInstructionWithName(absl::string_view name) {
   auto instructions_in_computation = instructions();
   auto it = absl::c_find_if(
       instructions_in_computation,

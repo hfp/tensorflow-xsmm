@@ -17,6 +17,9 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_domain_metadata.h"
@@ -26,22 +29,18 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/gtl/map_util.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/lib/strings/stringprintf.h"
 
 namespace xla {
 
 namespace {
 
-using ::absl::nullopt;
-using ::absl::optional;
-using ::tensorflow::StringPiece;
-using ::tensorflow::str_util::Join;
-using ::tensorflow::str_util::Split;
-using ::tensorflow::str_util::SplitAndParseAsInts;
+using absl::nullopt;
+using absl::optional;
+using absl::StrAppend;
+using absl::StrCat;
+using absl::StrJoin;
 using ::tensorflow::strings::Printf;
-using ::tensorflow::strings::StrAppend;
-using ::tensorflow::strings::StrCat;
 
 const double kF16max = 65504;
 
@@ -50,7 +49,7 @@ class HloParser {
  public:
   using LocTy = HloLexer::LocTy;
 
-  explicit HloParser(StringPiece str, const HloModuleConfig& config)
+  explicit HloParser(absl::string_view str, const HloModuleConfig& config)
       : lexer_(str), config_(config) {}
 
   // Runs the parser. Returns false if an error occurred.
@@ -60,7 +59,7 @@ class HloParser {
   std::unique_ptr<HloModule> ConsumeHloModule() { return std::move(module_); }
 
   // Returns the error information.
-  string GetError() const { return Join(error_, "\n"); }
+  string GetError() const { return StrJoin(error_, "\n"); }
 
   // Stand alone parsing utils for various aggregate data types.
   StatusOr<HloSharding> ParseShardingOnly();
@@ -253,8 +252,8 @@ class HloParser {
   bool CanBeParamListToShape();
 
   // Logs the current parsing line and the given message. Always returns false.
-  bool TokenError(StringPiece msg);
-  bool Error(LocTy loc, StringPiece msg);
+  bool TokenError(absl::string_view msg);
+  bool Error(LocTy loc, absl::string_view msg);
 
   // If the current token is 'kind', eats it (i.e. lexes the next token) and
   // returns true.
@@ -293,7 +292,32 @@ class HloParser {
       missing_instruction_hook_;
 };
 
-bool HloParser::Error(LocTy loc, StringPiece msg) {
+bool SplitToInt64s(absl::string_view s, char delim, std::vector<int64>* out) {
+  for (const auto& split : absl::StrSplit(s, delim)) {
+    int64 val;
+    if (!absl::SimpleAtoi(split, &val)) {
+      return false;
+    }
+    out->push_back(val);
+  }
+  return true;
+}
+
+// Creates replica groups from the provided nested array. groups[i] represents
+// the replica ids for group 'i'.
+std::vector<ReplicaGroup> CreateReplicaGroups(
+    tensorflow::gtl::ArraySlice<std::vector<int64>> groups) {
+  std::vector<ReplicaGroup> replica_groups;
+  absl::c_transform(groups, std::back_inserter(replica_groups),
+                    [](const std::vector<int64>& ids) {
+                      ReplicaGroup group;
+                      *group.mutable_replica_ids() = {ids.begin(), ids.end()};
+                      return group;
+                    });
+  return replica_groups;
+}
+
+bool HloParser::Error(LocTy loc, absl::string_view msg) {
   auto line_col = lexer_.GetLineAndColumn(loc);
   const unsigned line = line_col.first;
   const unsigned col = line_col.second;
@@ -303,12 +327,12 @@ bool HloParser::Error(LocTy loc, StringPiece msg) {
   error_lines.push_back(std::string(lexer_.GetLine(loc)));
   error_lines.push_back(col == 0 ? "" : StrCat(string(col - 1, ' '), "^"));
 
-  error_.push_back(Join(error_lines, "\n"));
+  error_.push_back(StrJoin(error_lines, "\n"));
   VLOG(1) << "Error: " << error_.back();
   return false;
 }
 
-bool HloParser::TokenError(StringPiece msg) {
+bool HloParser::TokenError(absl::string_view msg) {
   return Error(lexer_.GetLoc(), msg);
 }
 
@@ -637,31 +661,29 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       break;
     }
     case HloOpcode::kCrossReplicaSum: {
+      optional<std::vector<std::vector<int64>>> tmp_groups;
       optional<HloComputation*> to_apply;
       optional<std::vector<int64>> replica_group_ids;
       optional<string> barrier;
       optional<int64> all_reduce_id;
       attrs["to_apply"] = {/*required=*/true, AttrTy::kHloComputation,
                            &to_apply};
-      attrs["replica_group_ids"] = {
-          /*required=*/false, AttrTy::kBracedInt64List, &replica_group_ids};
+      attrs["replica_groups"] = {/*required=*/false,
+                                 AttrTy::kBracedInt64ListList, &tmp_groups};
       attrs["barrier"] = {/*required=*/false, AttrTy::kString, &barrier};
       attrs["all_reduce_id"] = {/*required=*/false, AttrTy::kInt64,
                                 &all_reduce_id};
       if (!ParseOperands(&operands) || !ParseAttributes(attrs)) {
         return false;
       }
-      if (replica_group_ids) {
-        instruction =
-            builder->AddInstruction(HloInstruction::CreateCrossReplicaSum(
-                shape, operands, *to_apply, *replica_group_ids,
-                barrier ? *barrier : "", all_reduce_id));
-      } else {
-        instruction =
-            builder->AddInstruction(HloInstruction::CreateCrossReplicaSum(
-                shape, operands, *to_apply, {}, barrier ? *barrier : "",
-                all_reduce_id));
+      std::vector<ReplicaGroup> replica_groups;
+      if (tmp_groups) {
+        replica_groups = CreateReplicaGroups(*tmp_groups);
       }
+      instruction =
+          builder->AddInstruction(HloInstruction::CreateCrossReplicaSum(
+              shape, operands, *to_apply, replica_groups,
+              barrier ? *barrier : "", all_reduce_id));
       break;
     }
     case HloOpcode::kAllToAll: {
@@ -669,22 +691,15 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       optional<string> barrier;
       attrs["replica_groups"] = {/*required=*/false,
                                  AttrTy::kBracedInt64ListList, &tmp_groups};
-      attrs["barrier"] = {/*required=*/false, AttrTy::kString, &barrier};
       if (!ParseOperands(&operands) || !ParseAttributes(attrs)) {
         return false;
       }
       std::vector<ReplicaGroup> replica_groups;
       if (tmp_groups) {
-        absl::c_transform(
-            *tmp_groups, std::back_inserter(replica_groups),
-            [](const std::vector<int64>& ids) {
-              ReplicaGroup group;
-              *group.mutable_replica_ids() = {ids.begin(), ids.end()};
-              return group;
-            });
+        replica_groups = CreateReplicaGroups(*tmp_groups);
       }
-      instruction = builder->AddInstruction(HloInstruction::CreateAllToAll(
-          shape, operands, replica_groups, barrier ? *barrier : ""));
+      instruction = builder->AddInstruction(
+          HloInstruction::CreateAllToAll(shape, operands, replica_groups));
       break;
     }
     case HloOpcode::kReshape: {
@@ -1801,10 +1816,10 @@ bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
     std::vector<tensorflow::int64> elems_seen_until_dim(
         elems_seen_per_dim.begin(), elems_seen_per_dim.begin() + dim);
     return StrCat("[",
-                  Join(elems_seen_until_dim, ",",
-                       [](string* out, const tensorflow::int64& num_elems) {
-                         StrAppend(out, num_elems - 1);
-                       }),
+                  StrJoin(elems_seen_until_dim, ",",
+                          [](string* out, const tensorflow::int64& num_elems) {
+                            StrAppend(out, num_elems - 1);
+                          }),
                   "]");
   };
   do {
@@ -1991,7 +2006,7 @@ bool HloParser::ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
         return Error(
             index_loc,
             StrCat("invalid multi-dimension index for shape with rank ", rank,
-                   ": [", Join(index, ", "), "]"));
+                   ": [", StrJoin(index, ", "), "]"));
       }
     }
     if (!ParseToken(TokKind::kColon,
@@ -2168,10 +2183,10 @@ bool HloParser::ParseAttributeHelper(
     } else {
       allowed_attrs = StrCat(
           "Allowed attributes: ",
-          Join(attrs, ", ",
-               [&](string* out, const std::pair<string, AttrConfig>& kv) {
-                 StrAppend(out, kv.first);
-               }));
+          StrJoin(attrs, ", ",
+                  [&](string* out, const std::pair<string, AttrConfig>& kv) {
+                    StrAppend(out, kv.first);
+                  }));
     }
     return Error(loc, Printf("unexpected attribute \"%s\".  %s", name.c_str(),
                              allowed_attrs.c_str()));
@@ -2484,20 +2499,24 @@ bool HloParser::ParseConvolutionDimensionNumbers(
   }
   string str = lexer_.GetStrVal();
 
-  // The str is expected to have 3 items, lhs, rhs, out, and it must looks like
+  // The str is expected to have 3 items, lhs, rhs, out, and it must look like
   // lhs_rhs->out, that is, the first separator is "_" and the second is "->".
-  // So we replace the "->" with "_" and then split on "_".
-  str = tensorflow::str_util::StringReplace(str, /*oldsub=*/"->",
-                                            /*newsub=*/"_",
-                                            /*replace_all=*/false);
-  std::vector<string> lhs_rhs_out = Split(str, "_");
-  if (lhs_rhs_out.size() != 3) {
+  std::vector<string> split1 = absl::StrSplit(str, "_");
+  if (split1.size() != 2) {
     LOG(FATAL) << "expects 3 items: lhs, rhs, and output dims, but sees "
                << str;
   }
+  std::vector<string> split2 = absl::StrSplit(split1[1], "->");
+  if (split2.size() != 2) {
+    LOG(FATAL) << "expects 3 items: lhs, rhs, and output dims, but sees "
+               << str;
+  }
+  absl::string_view lhs = split1[0];
+  absl::string_view rhs = split2[0];
+  absl::string_view out = split2[1];
 
-  const tensorflow::int64 rank = lhs_rhs_out[0].length();
-  if (rank != lhs_rhs_out[1].length() || rank != lhs_rhs_out[2].length()) {
+  const tensorflow::int64 rank = lhs.length();
+  if (rank != rhs.length() || rank != out.length()) {
     return TokenError(
         "convolution lhs, rhs, and output must have the same rank");
   }
@@ -2512,8 +2531,7 @@ bool HloParser::ParseConvolutionDimensionNumbers(
 
   // lhs
   {
-    const string& lhs = lhs_rhs_out[0];
-    if (!is_unique(lhs)) {
+    if (!is_unique(string(lhs))) {
       return TokenError(
           StrCat("expects unique lhs dimension numbers, but sees ", lhs));
     }
@@ -2536,8 +2554,7 @@ bool HloParser::ParseConvolutionDimensionNumbers(
   }
   // rhs
   {
-    const string& rhs = lhs_rhs_out[1];
-    if (!is_unique(rhs)) {
+    if (!is_unique(string(rhs))) {
       return TokenError(
           StrCat("expects unique rhs dimension numbers, but sees ", rhs));
     }
@@ -2560,8 +2577,7 @@ bool HloParser::ParseConvolutionDimensionNumbers(
   }
   // output
   {
-    const string& out = lhs_rhs_out[2];
-    if (!is_unique(out)) {
+    if (!is_unique(string(out))) {
       return TokenError(
           StrCat("expects unique output dimension numbers, but sees ", out));
     }
@@ -2827,7 +2843,7 @@ bool HloParser::ParseDxD(const string& name,
   // 2D or higher.
   if (lexer_.GetKind() == TokKind::kDxD) {
     string str = lexer_.GetStrVal();
-    if (!SplitAndParseAsInts(str, 'x', result)) {
+    if (!SplitToInt64s(str, 'x', result)) {
       return Error(loc,
                    Printf("expects sub-attribute '%s=ixj...'", name.c_str()));
     }
@@ -2847,10 +2863,9 @@ bool HloParser::ParseWindowPad(
     return TokenError("expects window pad pattern, e.g., '0_0x3_3'");
   }
   string str = lexer_.GetStrVal();
-  std::vector<string> padding_str = Split(str, 'x');
-  for (int i = 0; i < padding_str.size(); i++) {
+  for (const auto& padding_dim_str : absl::StrSplit(str, 'x')) {
     std::vector<tensorflow::int64> low_high;
-    if (!SplitAndParseAsInts(padding_str[i], '_', &low_high) ||
+    if (!SplitToInt64s(padding_dim_str, '_', &low_high) ||
         low_high.size() != 2) {
       return Error(loc,
                    "expects padding_low and padding_high separated by '_'");
@@ -2871,10 +2886,9 @@ bool HloParser::ParsePaddingConfig(PaddingConfig* padding) {
   }
   LocTy loc = lexer_.GetLoc();
   string str = lexer_.GetStrVal();
-  std::vector<string> padding_str = Split(str, 'x');
-  for (const auto& padding_dim_str : padding_str) {
+  for (const auto& padding_dim_str : absl::StrSplit(str, 'x')) {
     std::vector<tensorflow::int64> padding_dim;
-    if (!SplitAndParseAsInts(padding_dim_str, '_', &padding_dim) ||
+    if (!SplitToInt64s(padding_dim_str, '_', &padding_dim) ||
         (padding_dim.size() != 2 && padding_dim.size() != 3)) {
       return Error(loc,
                    "expects padding config pattern like 'low_high_interior' or "
@@ -3157,7 +3171,7 @@ Status HloParser::ParseSingleInstruction(HloComputation::Builder* builder,
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloString(
-    tensorflow::StringPiece str, const HloModuleConfig& config) {
+    absl::string_view str, const HloModuleConfig& config) {
   HloParser parser(str, config);
   if (!parser.Run()) {
     return InvalidArgument("Syntax error:\n%s", parser.GetError().c_str());
@@ -3165,39 +3179,38 @@ StatusOr<std::unique_ptr<HloModule>> ParseHloString(
   return parser.ConsumeHloModule();
 }
 
-StatusOr<std::unique_ptr<HloModule>> ParseHloString(
-    tensorflow::StringPiece str) {
+StatusOr<std::unique_ptr<HloModule>> ParseHloString(absl::string_view str) {
   HloModuleConfig config;
   return ParseHloString(str, config);
 }
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloOpToModule(
-    tensorflow::StringPiece str, tensorflow::StringPiece name) {
+    absl::string_view str, absl::string_view name) {
   HloModuleConfig config;
   HloParser parser(str, config);
-  auto builder = absl::make_unique<HloComputation::Builder>(name.ToString());
+  auto builder = absl::make_unique<HloComputation::Builder>(string(name));
   string root_name;
   TF_RETURN_IF_ERROR(parser.ParseSingleInstruction(builder.get(), &root_name));
   std::unique_ptr<HloComputation> computation = builder->Build();
-  auto module = absl::make_unique<HloModule>(name.ToString(), config);
+  auto module = absl::make_unique<HloModule>(string(name), config);
   module->AddEntryComputation(std::move(computation));
   return std::move(module);
 }
 
-StatusOr<HloSharding> ParseSharding(tensorflow::StringPiece str) {
+StatusOr<HloSharding> ParseSharding(absl::string_view str) {
   HloModuleConfig config;
   HloParser parser(str, config);
   return parser.ParseShardingOnly();
 }
 
-StatusOr<Window> ParseWindow(tensorflow::StringPiece str) {
+StatusOr<Window> ParseWindow(absl::string_view str) {
   HloModuleConfig config;
   HloParser parser(str, config);
   return parser.ParseWindowOnly();
 }
 
 StatusOr<ConvolutionDimensionNumbers> ParseConvolutionDimensionNumbers(
-    tensorflow::StringPiece str) {
+    absl::string_view str) {
   HloModuleConfig config;
   HloParser parser(str, config);
   return parser.ParseConvolutionDimensionNumbersOnly();

@@ -723,7 +723,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":array_ops",
-        ":cond_v2_impl",
         ":dtypes",
         ":framework_ops",
         ":graph_to_function_def",
@@ -2620,8 +2619,10 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":constant_op",
+        ":dtypes",
         ":framework_test_lib",
         ":sparse_ops",
+        ":sparse_tensor",
     ],
 )
 
