@@ -113,10 +113,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "eigen_archive",
         urls = [
-            "https://github.com/hfp/eigen/archive/5579dd29307437ded0fe1a7f6bb13b8afd8dd30b.zip",
+            "https://github.com/hfp/eigen/archive/1d43bcb17b2557bc50b0ae0c4d7d86c421878d50.zip",
         ],
-        sha256 = "fa3f2e834fd6fd71a7487a9767fef078f3db35888c417594ec7663ed58268ecc",
-        strip_prefix = "eigen-5579dd29307437ded0fe1a7f6bb13b8afd8dd30b",
+        sha256 = "56018c30c40c431a469907039925943c25435e83a1b68ae28bbf6aac3fc7861c",
+        strip_prefix = "eigen-1d43bcb17b2557bc50b0ae0c4d7d86c421878d50",
         build_file = str(Label("//third_party:eigen.BUILD"))
     )
 
@@ -136,10 +136,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "libxsmm_archive",
         urls = [
-            "https://github.com/hfp/libxsmm/archive/efdf902e3b2f125742b810978ed6926d95dbadbc.zip",
+            "https://github.com/hfp/libxsmm/archive/9ca1fe5a1f486d46f97e3945b0cefa6a079c5a93.zip",
         ],
-        sha256 = "aff5310afb3a005a82f561353634904ba0d0faff9cf9e8383583bca8a90efdc2",
-        strip_prefix = "libxsmm-efdf902e3b2f125742b810978ed6926d95dbadbc",
+        sha256 = "6799cd49e627d9e50966ebd0c7fa04b403bc97c92d25ebfb5e97b688e551987f",
+        strip_prefix = "libxsmm-9ca1fe5a1f486d46f97e3945b0cefa6a079c5a93",
         build_file = str(Label("//third_party:libxsmm.BUILD")),
     )
 
