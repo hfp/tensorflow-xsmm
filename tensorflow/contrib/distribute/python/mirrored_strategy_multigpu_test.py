@@ -888,8 +888,18 @@ class MirroredVariableUpdateTest(test.TestCase):
       self.assertIsInstance(mirrored_var, values.MirroredVariable)
       self.evaluate(variables.global_variables_initializer())
       self.assertEquals(1.0, self.evaluate(mirrored_var))
-      mirrored_var_result = self.evaluate(mirrored_var.assign_add(6.0))
+
+      # read_value == True
+      mirrored_var_result = self.evaluate(
+          mirrored_var.assign_add(6.0, read_value=True))
       self.assertEquals(7.0, mirrored_var_result)
+      self.assertEquals(7.0, self.evaluate(mirrored_var.get("/device:CPU:0")))
+      self.assertEquals(7.0, self.evaluate(mirrored_var.get("/device:GPU:0")))
+
+      # read_value == False
+      self.evaluate(mirrored_var.assign_add(2.0, read_value=False))
+      self.assertEquals(9.0, self.evaluate(mirrored_var.get("/device:CPU:0")))
+      self.assertEquals(9.0, self.evaluate(mirrored_var.get("/device:GPU:0")))
 
   @test_util.run_in_graph_and_eager_modes(config=config)
   def testAssignAddMirroredVarTowerContext(self):
@@ -956,6 +966,8 @@ class MirroredVariableUpdateTest(test.TestCase):
       self.assertEquals(5.0, self.evaluate(mirrored_var))
       mirrored_var_result = self.evaluate(mirrored_var.assign_sub(2.0))
       self.assertEquals(3.0, mirrored_var_result)
+      self.assertEquals(3.0, self.evaluate(mirrored_var.get("/device:GPU:0")))
+      self.assertEquals(3.0, self.evaluate(mirrored_var.get("/device:CPU:0")))
 
   @test_util.run_in_graph_and_eager_modes(config=config)
   def testAssignSubMirroredVarTowerContext(self):
@@ -1259,7 +1271,8 @@ class MultiWorkerMirroredStrategyTest(
     return strategy
 
   def testMinimizeLossGraph(self):
-    self._test_minimize_loss_graph(self._get_distribution_strategy())
+    self._test_minimize_loss_graph(self._get_distribution_strategy(),
+                                   learning_rate=0.05)
 
 
 class MultiWorkerMirroredStrategyTestWithChief(
@@ -1276,7 +1289,7 @@ class MultiWorkerMirroredStrategyTestWithChief(
   def testMinimizeLossGraph(self):
     strategy = mirrored_strategy.MirroredStrategy(num_gpus=context.num_gpus())
     strategy.configure(cluster_spec=self._cluster_spec)
-    self._test_minimize_loss_graph(strategy)
+    self._test_minimize_loss_graph(strategy, learning_rate=0.05)
 
 
 if __name__ == "__main__":
