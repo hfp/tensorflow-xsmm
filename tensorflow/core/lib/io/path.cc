@@ -253,6 +253,7 @@ int64 UniqueId() {
 string GetTempFilename(const string& extension) {
 #if defined(PLATFORM_WINDOWS) || defined(__ANDROID__)
   LOG(FATAL) << "GetTempFilename is not implemented in this platform.";
+  return string();
 #else
   for (const char* dir : std::vector<const char*>(
            {getenv("TEST_TMPDIR"), getenv("TMPDIR"), getenv("TMP"), "/tmp"})) {
