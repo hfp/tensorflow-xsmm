@@ -27,10 +27,12 @@ DeviceBase::~DeviceBase() { gtl::STLDeleteElements(&eigen_cpu_devices_); }
 
 const DeviceAttributes& DeviceBase::attributes() const {
   LOG(FATAL) << "Device does not implement attributes()";
+  static const DeviceAttributes* result; return *result;
 }
 
 const string& DeviceBase::name() const {
   LOG(FATAL) << "Device does not implement name()";
+  static const string result; return result;
 }
 
 void DeviceBase::set_eigen_cpu_device(Eigen::ThreadPoolDevice* d) {
