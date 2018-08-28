@@ -35,6 +35,14 @@ namespace tensorflow {
 namespace io {
 namespace internal {
 
+#ifdef PLATFORM_WINDOWS
+const char *const sepstring = "\\";
+const char separator = '\\';
+#else
+const char *const sepstring = "/";
+const char separator = '/';
+#endif
+
 string JoinPathImpl(std::initializer_list<StringPiece> paths) {
   string result;
 
@@ -46,7 +54,7 @@ string JoinPathImpl(std::initializer_list<StringPiece> paths) {
       continue;
     }
 
-    if (result[result.size() - 1] == '/') {
+    if (result[result.size() - 1] == separator) {
       if (IsAbsolutePath(path)) {
         strings::StrAppend(&result, path.substr(1));
       } else {
@@ -56,7 +64,7 @@ string JoinPathImpl(std::initializer_list<StringPiece> paths) {
       if (IsAbsolutePath(path)) {
         strings::StrAppend(&result, path);
       } else {
-        strings::StrAppend(&result, "/", path);
+        strings::StrAppend(&result, sepstring, path);
       }
     }
   }
@@ -72,16 +80,16 @@ std::pair<StringPiece, StringPiece> SplitPath(StringPiece uri) {
   StringPiece scheme, host, path;
   ParseURI(uri, &scheme, &host, &path);
 
-  auto pos = path.rfind('/');
+  auto pos = path.rfind(separator);
 #ifdef PLATFORM_WINDOWS
   if (pos == StringPiece::npos) pos = path.rfind('\\');
 #endif
-  // Handle the case with no '/' in 'path'.
+  // Handle the case with no separator in 'path'.
   if (pos == StringPiece::npos)
     return std::make_pair(StringPiece(uri.begin(), host.end() - uri.begin()),
                           path);
 
-  // Handle the case with a single leading '/' in 'path'.
+  // Handle the case with a single leading separator in 'path'.
   if (pos == 0)
     return std::make_pair(
         StringPiece(uri.begin(), path.begin() + 1 - uri.begin()),
@@ -108,7 +116,7 @@ std::pair<StringPiece, StringPiece> SplitBasename(StringPiece path) {
 }  // namespace internal
 
 bool IsAbsolutePath(StringPiece path) {
-  return !path.empty() && path[0] == '/';
+  return !path.empty() && path[0] == internal::separator;
 }
 
 StringPiece Dirname(StringPiece path) {
@@ -129,10 +137,10 @@ string CleanPath(StringPiece unclean_path) {
   string::iterator dst = path.begin();
 
   // Check for absolute path and determine initial backtrack limit.
-  const bool is_absolute_path = *src == '/';
+  const bool is_absolute_path = *src == internal::separator;
   if (is_absolute_path) {
     *dst++ = *src++;
-    while (*src == '/') ++src;
+    while (*src == internal::separator) ++src;
   }
   string::const_iterator backtrack_limit = dst;
 
@@ -142,17 +150,17 @@ string CleanPath(StringPiece unclean_path) {
 
     if (src[0] == '.') {
       //  1dot ".<whateverisnext>", check for END or SEP.
-      if (src[1] == '/' || !src[1]) {
+      if (src[1] == internal::separator || !src[1]) {
         if (*++src) {
           ++src;
         }
         parsed = true;
-      } else if (src[1] == '.' && (src[2] == '/' || !src[2])) {
+      } else if (src[1] == '.' && (src[2] == internal::separator || !src[2])) {
         // 2dot END or SEP (".." | "../<whateverisnext>").
         src += 2;
         if (dst != backtrack_limit) {
           // We can backtrack the previous part
-          for (--dst; dst != backtrack_limit && dst[-1] != '/'; --dst) {
+          for (--dst; dst != backtrack_limit && dst[-1] != internal::separator; --dst) {
             // Empty.
           }
         } else if (!is_absolute_path) {
@@ -175,7 +183,7 @@ string CleanPath(StringPiece unclean_path) {
 
     // If not parsed, copy entire part until the next SEP or EOS.
     if (!parsed) {
-      while (*src && *src != '/') {
+      while (*src && *src != internal::separator) {
         *dst++ = *src++;
       }
       if (*src) {
@@ -184,7 +192,7 @@ string CleanPath(StringPiece unclean_path) {
     }
 
     // Skip consecutive SEP occurrences
-    while (*src == '/') {
+    while (*src == internal::separator) {
       ++src;
     }
   }
@@ -192,8 +200,8 @@ string CleanPath(StringPiece unclean_path) {
   // Calculate and check the length of the cleaned path.
   string::difference_type path_length = dst - path.begin();
   if (path_length != 0) {
-    // Remove trailing '/' except if it is root path ("/" ==> path_length := 1)
-    if (path_length > 1 && path[path_length - 1] == '/') {
+    // Remove trailing separator except if it is root path ("/" ==> path_length := 1)
+    if (path_length > 1 && path[path_length - 1] == internal::separator) {
       --path_length;
     }
     path.resize(path_length);
@@ -224,7 +232,7 @@ void ParseURI(StringPiece remaining, StringPiece* scheme, StringPiece* host,
   }
 
   // 1. Parse host
-  if (!strings::Scanner(remaining).ScanUntil('/').GetResult(&remaining, host)) {
+  if (!strings::Scanner(remaining).ScanUntil(internal::separator).GetResult(&remaining, host)) {
     // No path, so the rest of the URI is the host.
     *host = remaining;
     *path = StringPiece(remaining.end(), 0);
