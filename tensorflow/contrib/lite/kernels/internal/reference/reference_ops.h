@@ -4133,6 +4133,23 @@ inline bool ReduceProd(const T* input_data, const int* input_dims,
                           resolved_axis, init_value, reducer);
 }
 
+// Computes the logical_or of elements across dimensions given in axis.
+inline bool ReduceAny(const bool* input_data, const int* input_dims,
+                      const int input_num_dims, bool* output_data,
+                      const int* output_dims, const int output_num_dims,
+                      const int* axis, const int64_t num_axis_dimensions,
+                      bool keep_dims, int* temp_index, int* resolved_axis) {
+  bool init_value = false;
+
+  auto reducer = [](const bool current, const bool in) -> bool {
+    return current || in;
+  };
+  return ReduceGeneric<bool>(input_data, input_dims, input_num_dims,
+                             output_data, output_dims, output_num_dims, axis,
+                             num_axis_dimensions, keep_dims, temp_index,
+                             resolved_axis, init_value, reducer);
+}
+
 // Computes the mean of elements across dimensions given in axis.
 // It does so in two stages, first calculates the sum of elements along the axis
 // then divides it by the number of element in axis.
@@ -4930,6 +4947,21 @@ inline void BroadcastBinaryFunction(const T1* input1_data,
   BroadcastBinaryFunction4DSlow(DimsToShape(input1_dims), input1_data,
                                 DimsToShape(input2_dims), input2_data,
                                 DimsToShape(output_dims), output_data, func);
+}
+
+// Legacy Dims<4> version.
+//
+// R: Result type. T1: Input 1 type. T2: Input 2 type.
+// TODO(renjieliu): Refactor other binary functions to use this one.
+template <typename R, typename T1, typename T2>
+inline void BinaryFunction(const T1* input1_data, const Dims<4>& input1_dims,
+                           const T2* input2_data, const Dims<4>& input2_dims,
+                           R* output_data, const Dims<4>& output_dims,
+                           R (*func)(T1, T2)) {
+  const int flat_size = MatchingFlatSize(input1_dims, input2_dims, output_dims);
+  for (int i = 0; i < flat_size; ++i) {
+    output_data[i] = func(input1_data[i], input2_data[i]);
+  }
 }
 
 }  // namespace reference_ops
