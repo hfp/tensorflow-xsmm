@@ -34,6 +34,7 @@ limitations under the License.
 #include "tensorflow/contrib/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/contrib/lite/kernels/internal/round.h"
 #include "tensorflow/contrib/lite/kernels/internal/strided_slice_logic.h"
+#include "tensorflow/contrib/lite/kernels/internal/tensor_utils.h"
 #include "tensorflow/contrib/lite/kernels/internal/types.h"
 
 namespace tflite {
@@ -1935,6 +1936,85 @@ inline void Conv(const float* input_data, const Dims<4>& input_dims,
                                    output_activation_max);
 }
 
+inline void HybridConv(const int8_t* input_data, const Dims<4>& input_dims,
+                       const int8_t* filter_data, const Dims<4>& filter_dims,
+                       const float* bias_data, const Dims<4>& bias_dims,
+                       int stride_width, int stride_height, int pad_width,
+                       int pad_height, float* scaling_factors_ptr,
+                       float output_activation_min, float output_activation_max,
+                       float* output_data, const Dims<4>& output_dims,
+                       int8_t* im2col_data, const Dims<4>& im2col_dims) {
+  const int batch_size = input_dims.sizes[3];
+  const int filter_width = ArraySize(filter_dims, 1);
+  const int filter_height = ArraySize(filter_dims, 2);
+
+  const int8* gemm_input_data = nullptr;
+  int num_input;
+  const bool need_im2col = stride_width != 1 || stride_height != 1 ||
+                           filter_width != 1 || filter_height != 1;
+
+  if (need_im2col) {
+    TFLITE_DCHECK(im2col_data);
+    // symmetric quantization assumes zero point of 0.
+    const int input_zero_point = 0;
+    Im2col(input_data, input_dims, stride_width, stride_height, pad_width,
+           pad_height, filter_height, filter_width, input_zero_point,
+           im2col_data, im2col_dims);
+    gemm_input_data = im2col_data;
+    num_input = im2col_dims.sizes[0] * im2col_dims.sizes[1] *
+                im2col_dims.sizes[2] * im2col_dims.sizes[3];
+  } else {
+    TFLITE_DCHECK(!im2col_data);
+    gemm_input_data = input_data;
+    num_input = input_dims.sizes[0] * input_dims.sizes[1] *
+                input_dims.sizes[2] * input_dims.sizes[3];
+  }
+
+  // Flatten 4D matrices into 2D matrices for matrix multiplication.
+
+  // Flatten so that each filter has its own row.
+  const int filter_rows = filter_dims.sizes[3];
+  const int filter_cols =
+      filter_dims.sizes[0] * filter_dims.sizes[1] * filter_dims.sizes[2];
+
+  // In MatrixBatchVectorMultiplyAccumulate, each output value is the
+  // dot product of one row of the first matrix with one row of the second
+  // matrix. Therefore, the number of cols in each matrix are equivalent.
+  //
+  // After Im2Col, each input patch becomes a row.
+  const int gemm_input_cols = filter_cols;
+  const int gemm_input_rows = num_input / gemm_input_cols;
+
+  const int output_cols = output_dims.sizes[0];
+  const int output_rows =
+      output_dims.sizes[1] * output_dims.sizes[2] * output_dims.sizes[3];
+  TFLITE_DCHECK_EQ(output_cols, filter_rows);
+  TFLITE_DCHECK_EQ(output_rows, gemm_input_rows);
+  TFLITE_DCHECK_EQ(bias_dims.sizes[0], output_cols);
+  TFLITE_DCHECK_EQ(bias_dims.sizes[1], 1);
+  TFLITE_DCHECK_EQ(bias_dims.sizes[2], 1);
+  TFLITE_DCHECK_EQ(bias_dims.sizes[3], 1);
+
+  // MatrixBatchVectorMultiplyAccumulate assumes that each row of the second
+  // input matrix has its own scale factor. This code duplicates the scale
+  // factors for each row in the same batch.
+  const int rows_per_batch = gemm_input_rows / batch_size;
+  for (int i = gemm_input_rows - 1; i >= 0; --i) {
+    scaling_factors_ptr[i] = scaling_factors_ptr[i / rows_per_batch];
+  }
+
+  tensor_utils::ZeroVector(output_data, output_rows * output_cols);
+
+  tensor_utils::MatrixBatchVectorMultiplyAccumulate(
+      filter_data, filter_rows, filter_cols, gemm_input_data,
+      scaling_factors_ptr, /*n_batch=*/gemm_input_rows, output_data,
+      /*result_stride=*/1);
+
+  AddBiasAndEvalActivationFunction(bias_data, bias_dims, output_data,
+                                   output_dims, output_activation_min,
+                                   output_activation_max);
+}
+
 template <FusedActivationFunctionType Ac>
 void Conv(const float* input_data, const Dims<4>& input_dims,
           const float* filter_data, const Dims<4>& filter_dims,
@@ -2748,17 +2828,16 @@ inline void BroadcastAddFivefold(const ArithmeticParams& unswitched_params,
   }
 }
 
-inline void Mul(const float* input1_data, const Dims<4>& input1_dims,
-                const float* input2_data, const Dims<4>& input2_dims,
-                float output_activation_min, float output_activation_max,
-                float* output_data, const Dims<4>& output_dims) {
+inline void Mul(const ArithmeticParams& params,
+                const RuntimeShape& input1_shape, const float* input1_data,
+                const RuntimeShape& input2_shape, const float* input2_data,
+                const RuntimeShape& output_shape, float* output_data) {
   gemmlowp::ScopedProfilingLabel label("Mul");
-  TFLITE_DCHECK(IsPackedWithoutStrides(input1_dims));
-  TFLITE_DCHECK(IsPackedWithoutStrides(input2_dims));
-  TFLITE_DCHECK(IsPackedWithoutStrides(output_dims));
+  const float output_activation_min = params.float_activation_min;
+  const float output_activation_max = params.float_activation_max;
 
   int i = 0;
-  const int size = MatchingFlatSize(input1_dims, input2_dims, output_dims);
+  const int size = MatchingFlatSize(input1_shape, input2_shape, output_shape);
 #ifdef USE_NEON
   const auto activation_min = vdupq_n_f32(output_activation_min);
   const auto activation_max = vdupq_n_f32(output_activation_max);
@@ -2809,6 +2888,20 @@ inline void Mul(const float* input1_data, const Dims<4>& input1_dims,
   }
 }
 
+// Legacy Dims<4>.
+inline void Mul(const float* input1_data, const Dims<4>& input1_dims,
+                const float* input2_data, const Dims<4>& input2_dims,
+                float output_activation_min, float output_activation_max,
+                float* output_data, const Dims<4>& output_dims) {
+  tflite::ArithmeticParams op_params;
+  op_params.float_activation_min = output_activation_min;
+  op_params.float_activation_max = output_activation_max;
+
+  Mul(op_params, DimsToShape(input1_dims), input1_data,
+      DimsToShape(input2_dims), input2_data, DimsToShape(output_dims),
+      output_data);
+}
+
 // legacy, for compatibility with old checked-in code
 template <FusedActivationFunctionType Ac>
 void Mul(const float* input1_data, const Dims<4>& input1_dims,
@@ -2821,13 +2914,16 @@ void Mul(const float* input1_data, const Dims<4>& input1_dims,
       output_activation_max, output_data, output_dims);
 }
 
-inline void Mul(const int32* input1_data, const Dims<4>& input1_dims,
-                const int32* input2_data, const Dims<4>& input2_dims,
-                int32 output_activation_min, int32 output_activation_max,
-                int32* output_data, const Dims<4>& output_dims) {
-  gemmlowp::ScopedProfilingLabel label("Mul/int32");
+inline void Mul(const ArithmeticParams& params,
+                const RuntimeShape& input1_shape, const int32* input1_data,
+                const RuntimeShape& input2_shape, const int32* input2_data,
+                const RuntimeShape& output_shape, int32* output_data) {
+  gemmlowp::ScopedProfilingLabel label("Mul/int32/activation");
 
-  const int flat_size = MatchingFlatSize(input1_dims, input2_dims, output_dims);
+  const int flat_size =
+      MatchingFlatSize(input1_shape, input2_shape, output_shape);
+  const int32 output_activation_min = params.quantized_activation_min;
+  const int32 output_activation_max = params.quantized_activation_max;
   for (int i = 0; i < flat_size; ++i) {
     output_data[i] = ActivationFunctionWithMinMax(
         input1_data[i] * input2_data[i], output_activation_min,
@@ -2835,22 +2931,38 @@ inline void Mul(const int32* input1_data, const Dims<4>& input1_dims,
   }
 }
 
-template <FusedActivationFunctionType Ac>
-void Mul(const int32* input1_data, const Dims<4>& input1_dims,
-         const int32* input2_data, const Dims<4>& input2_dims,
-         int32* output_data, const Dims<4>& output_dims) {
-  gemmlowp::ScopedProfilingLabel label("Mul/int32");
-  TFLITE_DCHECK(Ac == FusedActivationFunctionType::kNone);
+// Legacy Dims<4>.
+inline void Mul(const int32* input1_data, const Dims<4>& input1_dims,
+                const int32* input2_data, const Dims<4>& input2_dims,
+                int32 output_activation_min, int32 output_activation_max,
+                int32* output_data, const Dims<4>& output_dims) {
+  tflite::ArithmeticParams op_params;
+  op_params.quantized_activation_min = output_activation_min;
+  op_params.quantized_activation_max = output_activation_max;
 
-  auto input1_map = MapAsVector(input1_data, input1_dims);
-  auto input2_map = MapAsVector(input2_data, input2_dims);
-  auto output_map = MapAsVector(output_data, output_dims);
-  if (AreSameDims(input1_dims, input2_dims)) {
+  Mul(op_params, DimsToShape(input1_dims), input1_data,
+      DimsToShape(input2_dims), input2_data, DimsToShape(output_dims),
+      output_data);
+}
+
+inline void MulNoActivation(const ArithmeticParams& params,
+                            const RuntimeShape& input1_shape,
+                            const int32* input1_data,
+                            const RuntimeShape& input2_shape,
+                            const int32* input2_data,
+                            const RuntimeShape& output_shape,
+                            int32* output_data) {
+  gemmlowp::ScopedProfilingLabel label("Mul/int32");
+
+  auto input1_map = MapAsVector(input1_data, input1_shape);
+  auto input2_map = MapAsVector(input2_data, input2_shape);
+  auto output_map = MapAsVector(output_data, output_shape);
+  if (input1_shape == input2_shape) {
     output_map.array() = input1_map.array() * input2_map.array();
-  } else if (FlatSize(input2_dims) == 1) {
+  } else if (input2_shape.FlatSize() == 1) {
     auto scalar = input2_data[0];
     output_map.array() = input1_map.array() * scalar;
-  } else if (FlatSize(input1_dims) == 1) {
+  } else if (input1_shape.FlatSize() == 1) {
     auto scalar = input1_data[0];
     output_map.array() = scalar * input2_map.array();
   } else {
@@ -2859,14 +2971,30 @@ void Mul(const int32* input1_data, const Dims<4>& input1_dims,
   }
 }
 
-inline void Mul(const int16* input1_data, const Dims<4>& input1_dims,
-                const int16* input2_data, const Dims<4>& input2_dims,
-                int16* output_data, const Dims<4>& output_dims) {
-  gemmlowp::ScopedProfilingLabel label("Mul/Int16");
+// Legacy Dims<4>.
+template <FusedActivationFunctionType Ac>
+void Mul(const int32* input1_data, const Dims<4>& input1_dims,
+         const int32* input2_data, const Dims<4>& input2_dims,
+         int32* output_data, const Dims<4>& output_dims) {
+  TFLITE_DCHECK(Ac == FusedActivationFunctionType::kNone);
+  tflite::ArithmeticParams op_params;
+  // No parameters needed.
+
+  MulNoActivation(op_params, DimsToShape(input1_dims), input1_data,
+                  DimsToShape(input2_dims), input2_data,
+                  DimsToShape(output_dims), output_data);
+}
+
+inline void Mul(const ArithmeticParams& params,
+                const RuntimeShape& input1_shape, const int16* input1_data,
+                const RuntimeShape& input2_shape, const int16* input2_data,
+                const RuntimeShape& output_shape, int16* output_data) {
+  gemmlowp::ScopedProfilingLabel label("Mul/Int16/NoActivation");
   // This is a copy of the reference implementation. We do not currently have a
   // properly optimized version.
 
-  const int flat_size = MatchingFlatSize(output_dims, input1_dims, input2_dims);
+  const int flat_size =
+      MatchingFlatSize(input1_shape, input2_shape, output_shape);
 
   for (int i = 0; i < flat_size; i++) {
     // F0 uses 0 integer bits, range [-1, 1].
@@ -2878,17 +3006,32 @@ inline void Mul(const int16* input1_data, const Dims<4>& input1_dims,
   }
 }
 
+// Legacy Dims<4>.
 inline void Mul(const int16* input1_data, const Dims<4>& input1_dims,
                 const int16* input2_data, const Dims<4>& input2_dims,
-                int32 output_offset, int32 output_activation_min,
-                int32 output_activation_max, uint8* output_data,
-                const Dims<4>& output_dims) {
+                int16* output_data, const Dims<4>& output_dims) {
+  tflite::ArithmeticParams op_params;
+  // No parameters needed.
+
+  Mul(op_params, DimsToShape(input1_dims), input1_data,
+      DimsToShape(input2_dims), input2_data, DimsToShape(output_dims),
+      output_data);
+}
+
+inline void Mul(const ArithmeticParams& params,
+                const RuntimeShape& input1_shape, const int16* input1_data,
+                const RuntimeShape& input2_shape, const int16* input2_data,
+                const RuntimeShape& output_shape, uint8* output_data) {
   gemmlowp::ScopedProfilingLabel label("Mul/Int16Uint8");
   // This is a copy of the reference implementation. We do not currently have a
   // properly optimized version.
+  const int32 output_activation_min = params.quantized_activation_min;
+  const int32 output_activation_max = params.quantized_activation_max;
+  const int32 output_offset = params.output_offset;
   TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
 
-  const int flat_size = MatchingFlatSize(output_dims, input1_dims, input2_dims);
+  const int flat_size =
+      MatchingFlatSize(input1_shape, input2_shape, output_shape);
 
   for (int i = 0; i < flat_size; i++) {
     // F0 uses 0 integer bits, range [-1, 1].
@@ -2906,62 +3049,51 @@ inline void Mul(const int16* input1_data, const Dims<4>& input1_dims,
   }
 }
 
-// TODO(jiawen): We can implement BroadcastMul on buffers of arbitrary
-// dimensionality if the runtime code does a single loop over one dimension
-// that handles broadcasting as the base case. The code generator would then
-// generate max(D1, D2) nested for loops.
-// TODO(benoitjacob): BroadcastMul is intentionally duplicated from
-// reference_ops.h. Once an optimized version is implemented and NdArrayDesc<T>
-// is no longer referenced in this file, move NdArrayDesc<T> from types.h to
-// reference_ops.h.
+// Legacy Dims<4>.
+inline void Mul(const int16* input1_data, const Dims<4>& input1_dims,
+                const int16* input2_data, const Dims<4>& input2_dims,
+                int32 output_offset, int32 output_activation_min,
+                int32 output_activation_max, uint8* output_data,
+                const Dims<4>& output_dims) {
+  tflite::ArithmeticParams op_params;
+  op_params.output_offset = output_offset;
+  op_params.quantized_activation_min = output_activation_min;
+  op_params.quantized_activation_max = output_activation_max;
+
+  Mul(op_params, DimsToShape(input1_dims), input1_data,
+      DimsToShape(input2_dims), input2_data, DimsToShape(output_dims),
+      output_data);
+}
+
+// Legacy Dims<4>.
 template <typename T>
 void BroadcastMul(const T* input1_data, const Dims<4>& input1_dims,
                   const T* input2_data, const Dims<4>& input2_dims,
                   T output_activation_min, T output_activation_max,
                   T* output_data, const Dims<4>& output_dims) {
-  gemmlowp::ScopedProfilingLabel label("BroadcastMul");
+  tflite::ArithmeticParams op_params;
+  SetActivationParams(output_activation_min, output_activation_max, &op_params);
 
-  NdArrayDesc<4> desc1;
-  NdArrayDesc<4> desc2;
-  NdArrayDescsForElementwiseBroadcast(input1_dims, input2_dims, &desc1, &desc2);
-
-  // In Tensorflow, the dimensions are canonically named (batch_number, row,
-  // col, channel), with extents (batches, height, width, depth), with the
-  // trailing dimension changing most rapidly (channels has the smallest stride,
-  // typically 1 element).
-  //
-  // In generated C code, we store arrays with the dimensions reversed. The
-  // first dimension has smallest stride.
-  //
-  // We name our variables by their Tensorflow convention, but generate C code
-  // nesting loops such that the innermost loop has the smallest stride for the
-  // best cache behavior.
-  for (int b = 0; b < ArraySize(output_dims, 3); ++b) {
-    for (int y = 0; y < ArraySize(output_dims, 2); ++y) {
-      for (int x = 0; x < ArraySize(output_dims, 1); ++x) {
-        for (int c = 0; c < ArraySize(output_dims, 0); ++c) {
-          output_data[Offset(output_dims, c, x, y, b)] =
-              ActivationFunctionWithMinMax(
-                  input1_data[SubscriptToIndex(desc1, c, x, y, b)] *
-                      input2_data[SubscriptToIndex(desc2, c, x, y, b)],
-                  output_activation_min, output_activation_max);
-        }
-      }
-    }
-  }
+  BroadcastMul4DSlow(op_params, DimsToShape(input1_dims), input1_data,
+                     DimsToShape(input2_dims), input2_data,
+                     DimsToShape(output_dims), output_data);
 }
 
+// Legacy Dims<4>.
 // legacy, for compatibility with old checked-in code
-template <FusedActivationFunctionType Ac, typename T>
-void BroadcastMul(const T* input1_data, const Dims<4>& input1_dims,
-                  const T* input2_data, const Dims<4>& input2_dims,
-                  T* output_data, const Dims<4>& output_dims) {
-  T output_activation_min, output_activation_max;
-  GetActivationMinMax(Ac, &output_activation_min, &output_activation_max);
+template <FusedActivationFunctionType Ac>
+inline void BroadcastMul(const float* input1_data, const Dims<4>& input1_dims,
+                         const float* input2_data, const Dims<4>& input2_dims,
+                         float* output_data, const Dims<4>& output_dims) {
+  tflite::ArithmeticParams op_params;
+  float float_activation_min;
+  float float_activation_max;
+  GetActivationMinMax(Ac, &float_activation_min, &float_activation_max);
+  SetActivationParams(float_activation_min, float_activation_max, &op_params);
 
-  BroadcastMul(input1_data, input1_dims, input2_data, input2_dims,
-               output_activation_min, output_activation_max, output_data,
-               output_dims);
+  BroadcastMul4DSlow(op_params, DimsToShape(input1_dims), input1_data,
+                     DimsToShape(input2_dims), input2_data,
+                     DimsToShape(output_dims), output_data);
 }
 
 // Element-wise mul that can often be used for inner loop of broadcast Mul as

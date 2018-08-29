@@ -466,6 +466,19 @@ XlaOp XlaBuilder::ConstantLiteral(const LiteralSlice& literal) {
   });
 }
 
+XlaOp XlaBuilder::IotaGen(const Shape& shape, int64 iota_dimension) {
+  return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
+    HloInstructionProto instr;
+    *instr.mutable_shape() = shape;
+    instr.add_dimensions(iota_dimension);
+    return AddInstruction(std::move(instr), HloOpcode::kIota);
+  });
+}
+
+XlaOp XlaBuilder::IotaGen(PrimitiveType type, int64 size) {
+  return IotaGen(ShapeUtil::MakeShape(type, {size}), /*iota_dimension=*/0);
+}
+
 XlaOp XlaBuilder::Call(const XlaComputation& computation,
                        tensorflow::gtl::ArraySlice<XlaOp> operands) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
@@ -1971,6 +1984,27 @@ XlaOp XlaBuilder::AllToAll(const XlaOp& operand, int64 split_dimension,
   });
 }
 
+XlaOp XlaBuilder::CollectivePermute(
+    const XlaOp& operand,
+    const std::vector<std::pair<int64, int64>>& source_target_pairs) {
+  return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
+    TF_ASSIGN_OR_RETURN(const Shape& operand_shape, GetShape(operand));
+    HloInstructionProto instr;
+    TF_ASSIGN_OR_RETURN(
+        *instr.mutable_shape(),
+        ShapeInference::InferCollectivePermuteShape(operand_shape));
+
+    for (const auto& pair : source_target_pairs) {
+      auto* proto_pair = instr.add_source_target_pairs();
+      proto_pair->set_source(pair.first);
+      proto_pair->set_target(pair.second);
+    }
+
+    return AddInstruction(std::move(instr), HloOpcode::kCollectivePermute,
+                          {operand});
+  });
+}
+
 XlaOp XlaBuilder::SelectAndScatter(
     const XlaOp& operand, const XlaComputation& select,
     tensorflow::gtl::ArraySlice<int64> window_dimensions,
@@ -2782,6 +2816,12 @@ XlaOp AllToAll(const XlaOp& operand, int64 split_dimension,
                                      split_count, replica_groups);
 }
 
+XlaOp CollectivePermute(
+    const XlaOp& operand,
+    const std::vector<std::pair<int64, int64>>& source_target_pairs) {
+  return operand.builder()->CollectivePermute(operand, source_target_pairs);
+}
+
 XlaOp SelectAndScatter(const XlaOp& operand, const XlaComputation& select,
                        tensorflow::gtl::ArraySlice<int64> window_dimensions,
                        tensorflow::gtl::ArraySlice<int64> window_strides,
@@ -2996,10 +3036,11 @@ XlaOp BatchNormGrad(const XlaOp& operand, const XlaOp& scale,
 }
 
 XlaOp IotaGen(XlaBuilder* builder, PrimitiveType type, int64 size) {
-  HloInstructionProto instr;
-  *instr.mutable_shape() = ShapeUtil::MakeShape(type, {size});
-  return builder->ReportErrorOrReturn(
-      builder->AddInstruction(std::move(instr), HloOpcode::kIota));
+  return builder->IotaGen(type, size);
+}
+
+XlaOp IotaGen(XlaBuilder* builder, const Shape& shape, int64 iota_dimension) {
+  return builder->IotaGen(shape, iota_dimension);
 }
 
 }  // namespace xla

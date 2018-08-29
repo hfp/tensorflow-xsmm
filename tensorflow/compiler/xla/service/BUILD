@@ -230,6 +230,7 @@ cc_library(
     hdrs = ["hlo_evaluator.h"],
     deps = [
         ":hlo",
+        ":hlo_casting_utils",
         ":hlo_query",
         ":shape_inference",
         "//tensorflow/compiler/xla:literal",
@@ -1349,6 +1350,7 @@ cc_library(
     hdrs = ["algebraic_simplifier.h"],
     deps = [
         ":hlo",
+        ":hlo_casting_utils",
         ":hlo_creation_utils",
         ":hlo_pass",
         ":hlo_query",
@@ -1375,6 +1377,7 @@ tf_cc_test(
     deps = [
         ":algebraic_simplifier",
         ":hlo",
+        ":hlo_casting_utils",
         ":hlo_matchers",
         ":hlo_pass",
         "//tensorflow/compiler/xla:literal",
@@ -2290,6 +2293,7 @@ cc_library(
         ":hlo_pass",
         ":shape_inference",
         "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:util",
         "//tensorflow/core:lib",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
@@ -2682,6 +2686,7 @@ cc_library(
     hdrs = ["elemental_ir_emitter.h"],
     deps = [
         ":hlo",
+        ":hlo_casting_utils",
         ":hlo_module_config",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:status_macros",
