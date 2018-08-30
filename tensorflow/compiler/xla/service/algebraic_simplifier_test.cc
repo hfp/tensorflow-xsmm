@@ -54,12 +54,7 @@ AlgebraicSimplifier::ValidBitcastCallback non_bitcasting_callback() {
   return [](const Shape&, const Shape&) { return false; };
 }
 
-class AlgebraicSimplifierTest : public HloVerifiedTestBase {
- public:
-  AlgebraicSimplifierTest()
-      : HloVerifiedTestBase(/*layout_sensitive=*/false,
-                            /*allow_mixed_precision=*/false) {}
-};
+class AlgebraicSimplifierTest : public HloVerifiedTestBase {};
 
 // Test that A + 0 is simplified to A
 TEST_F(AlgebraicSimplifierTest, AddZero) {
@@ -298,6 +293,21 @@ TEST_F(AlgebraicSimplifierTest, ConstantNotToBroadcast) {
   EXPECT_THAT(root, op::Constant());
 }
 
+TEST_F(AlgebraicSimplifierTest, IotaToBroadcast) {
+  HloComputation::Builder builder(TestName());
+  builder.AddInstruction(HloInstruction::CreateConstant(
+      LiteralUtil::CreateR1<float>({0.0f, 1.0f, 2.0f})));
+
+  auto computation = module().AddEntryComputation(builder.Build());
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_THAT(root, op::Constant());
+  AlgebraicSimplifier simplifier(/*is_layout_sensitive=*/false,
+                                 non_bitcasting_callback());
+  ASSERT_TRUE(simplifier.Run(&module()).ValueOrDie());
+  root = computation->root_instruction();
+  EXPECT_THAT(root, op::Iota());
+}
+
 // Test that A - 0 is simplified to A
 TEST_F(AlgebraicSimplifierTest, SubZero) {
   Shape r0f32 = ShapeUtil::MakeShape(F32, {});
@@ -521,7 +531,7 @@ TEST_F(AlgebraicSimplifierTest, DivideByConstant) {
       HloInstruction::CreateParameter(0, r1f32, "param0"));
   HloInstruction* constant =
       builder.AddInstruction(HloInstruction::CreateConstant(
-          LiteralUtil::CreateR1<float>({0.f, 1.f, 2.f})));
+          LiteralUtil::CreateR1<float>({1.f, 2.f, 3.f})));
   builder.AddInstruction(HloInstruction::CreateBinary(r1f32, HloOpcode::kDivide,
                                                       param0, constant));
 
@@ -2998,12 +3008,7 @@ struct DotOfConcatTestSpec {
 
 class DotOfConcatSimplificationTest
     : public HloVerifiedTestBase,
-      public ::testing::WithParamInterface<DotOfConcatTestSpec> {
- public:
-  DotOfConcatSimplificationTest()
-      : HloVerifiedTestBase(/*layout_sensitive=*/false,
-                            /*allow_mixed_precision=*/false) {}
-};
+      public ::testing::WithParamInterface<DotOfConcatTestSpec> {};
 
 // Test that we transform
 //  dot(const, concat(A, B, C))
@@ -3176,12 +3181,7 @@ struct DotOfGatherTestSpec {
 
 class DotOfGatherSimplificationTest
     : public HloVerifiedTestBase,
-      public ::testing::WithParamInterface<DotOfGatherTestSpec> {
- public:
-  DotOfGatherSimplificationTest()
-      : HloVerifiedTestBase(/*layout_sensitive=*/false,
-                            /*allow_mixed_precision=*/false) {}
-};
+      public ::testing::WithParamInterface<DotOfGatherTestSpec> {};
 
 // input: dot(DS(ctA), ctB))
 // where DS(ctA) = DS({M x K}, {s, 0}, {1, K}) and ctB = {K x N}.
