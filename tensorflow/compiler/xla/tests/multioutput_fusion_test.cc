@@ -47,7 +47,6 @@ limitations under the License.
 namespace xla {
 namespace {
 
-using ::tensorflow::gtl::ArraySlice;
 
 class MultiOutputFusionTest : public HloTestBase {
  protected:
@@ -96,8 +95,8 @@ class MultiOutputFusionTest : public HloTestBase {
     auto computation = hlo_module->AddEntryComputation(builder.Build(dot));
 
     if (manual_fusion) {
-      auto tuple = computation->AddInstruction(HloInstruction::CreateTuple(
-          ArraySlice<HloInstruction*>({sub, add2}, 0, 2)));
+      auto tuple =
+          computation->AddInstruction(HloInstruction::CreateTuple({sub, add2}));
       auto gte0 = computation->AddInstruction(
           HloInstruction::CreateGetTupleElement(elem_shape2, tuple, 0));
       auto gte1 = computation->AddInstruction(
@@ -159,8 +158,8 @@ class MultiOutputFusionTest : public HloTestBase {
     auto computation = hlo_module->AddEntryComputation(builder.Build(dot));
 
     if (manual_fusion) {
-      auto tuple = computation->AddInstruction(HloInstruction::CreateTuple(
-          ArraySlice<HloInstruction*>({sub_U8, add}, 0, 2)));
+      auto tuple = computation->AddInstruction(
+          HloInstruction::CreateTuple({sub_U8, add}));
 
       auto gte0 = computation->AddInstruction(
           HloInstruction::CreateGetTupleElement(elem_shape_U8, tuple, 0));
