@@ -944,7 +944,7 @@ class HloConvolutionInstruction : public HloInstruction {
       const Shape& shape, HloInstruction* lhs, HloInstruction* rhs,
       int64 feature_group_count, const Window& window,
       const ConvolutionDimensionNumbers& dimension_numbers,
-      const PrecisionConfigProto& precision_config);
+      const PrecisionConfig& precision_config);
   const Window& window() const override { return window_; }
   void set_window(const Window& window) override { window_ = window; }
   const ConvolutionDimensionNumbers& convolution_dimension_numbers() const {
@@ -1271,6 +1271,72 @@ class HloIotaInstruction : public HloInstruction {
   const int64 iota_dimension_;
 };
 
+class HloDotInstruction : public HloInstruction {
+ public:
+  // Creates a dot op with operands 'lhs' and 'rhs' with contracting and batch
+  // dimensions specified in 'dimension_numbers'.
+  explicit HloDotInstruction(const Shape& shape, HloInstruction* lhs,
+                             HloInstruction* rhs,
+                             const DotDimensionNumbers& dimension_numbers,
+                             const PrecisionConfig& precision_config);
+
+  // Returns data on the dimension numbers used for a dot operation.
+  const DotDimensionNumbers& dot_dimension_numbers() const {
+    return dot_dimension_numbers_;
+  }
+
+  // Returns a serialized representation of this instruction.
+  HloInstructionProto ToProto() const override;
+
+ private:
+  std::vector<string> ExtraAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      const std::function<bool(const HloComputation*, const HloComputation*)>&
+          eq_computations) const override;
+  // Implementation for non-common logic of CloneWithNewOperands.
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext* context) const override;
+  // Returns the dump string of the dot dimension numbers.
+  string DotDimensionNumbersToString() const;
+
+  // Describes the dimension numbers used for a dot.
+  DotDimensionNumbers dot_dimension_numbers_;
+};
+
+class HloDomainInstruction : public HloInstruction {
+ public:
+  explicit HloDomainInstruction(
+      const Shape& shape, HloInstruction* operand,
+      std::unique_ptr<DomainMetadata> operand_side_metadata,
+      std::unique_ptr<DomainMetadata> user_side_metadata);
+
+  // Retrieves the operand side metadata of a kDomain instruction.
+  const DomainMetadata& operand_side_metadata() const {
+    return *operand_side_metadata_;
+  }
+  // Retrieves the user side metadata of a kDomain instruction.
+  const DomainMetadata& user_side_metadata() const {
+    return *user_side_metadata_;
+  }
+
+ private:
+  std::vector<string> ExtraAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      const std::function<bool(const HloComputation*, const HloComputation*)>&
+          eq_computations) const override;
+  // Implementation for non-common logic of CloneWithNewOperands.
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext* context) const override;
+
+  std::unique_ptr<DomainMetadata> operand_side_metadata_;
+  std::unique_ptr<DomainMetadata> user_side_metadata_;
+};
 }  // namespace xla
 
 #endif  // TENSORFLOW_COMPILER_XLA_SERVICE_HLO_INSTRUCTIONS_H_

@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_domain_metadata.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/service/hlo_schedule.h"
 #include "tensorflow/compiler/xla/service/hlo_sharding_metadata.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/util.h"
@@ -43,6 +44,20 @@ using absl::StrFormat;
 using absl::StrJoin;
 
 const double kF16max = 65504;
+
+// Creates and returns a schedule created using the order of the instructions in
+// the HloComputation::instructions() vectors in the module.
+HloSchedule ScheduleFromInstructionOrder(const HloModule* module) {
+  HloSchedule schedule(module);
+  for (const HloComputation* computation : module->computations()) {
+    if (!computation->IsFusionComputation()) {
+      for (const HloInstruction* instruction : computation->instructions()) {
+        schedule.GetOrCreateSequence(computation).push_back(instruction);
+      }
+    }
+  }
+  return schedule;
+}
 
 // Parser for the HloModule::ToString() format text.
 class HloParser {
@@ -221,7 +236,7 @@ class HloParser {
   bool ParseWindowPad(std::vector<std::vector<tensorflow::int64>>* pad);
 
   bool ParseSliceRanges(SliceRanges* result);
-  bool ParsePrecisionList(std::vector<PrecisionConfigProto::Precision>* result);
+  bool ParsePrecisionList(std::vector<PrecisionConfig::Precision>* result);
   bool ParseInt64List(const TokKind start, const TokKind end,
                       const TokKind delim,
                       std::vector<tensorflow::int64>* result);
@@ -240,7 +255,7 @@ class HloParser {
   bool ParseFftType(FftType* result);
   bool ParseFusionKind(HloInstruction::FusionKind* result);
   bool ParseRandomDistribution(RandomDistribution* result);
-  bool ParsePrecision(PrecisionConfigProto::Precision* result);
+  bool ParsePrecision(PrecisionConfig::Precision* result);
   bool ParseInt64(tensorflow::int64* result);
   bool ParseDouble(double* result);
   bool ParseBool(bool* result);
@@ -366,9 +381,25 @@ bool HloParser::ParseHloModule() {
     return false;
   }
 
+  absl::optional<bool> is_scheduled;
+  std::unordered_map<string, AttrConfig> attrs;
+  attrs["is_scheduled"] = {/*required=*/false, AttrTy::kBool, &is_scheduled};
+  if (!ParseAttributes(attrs)) {
+    return false;
+  }
+
   module_ = absl::make_unique<HloModule>(name, config_);
 
-  return ParseComputations();
+  if (!ParseComputations()) {
+    return false;
+  }
+
+  if (is_scheduled.has_value() && *is_scheduled) {
+    TF_CHECK_OK(
+        module_->set_schedule(ScheduleFromInstructionOrder(module_.get())));
+  }
+
+  return true;
 }
 
 // computations ::= (computation)+
@@ -909,7 +940,7 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
                              AttrTy::kConvolutionDimensionNumbers, &dnums};
       attrs["feature_group_count"] = {/*required=*/false, AttrTy::kInt64,
                                       &feature_group_count};
-      optional<std::vector<PrecisionConfigProto::Precision>> operand_precision;
+      optional<std::vector<PrecisionConfig::Precision>> operand_precision;
       attrs["operand_precision"] = {/*required=*/false, AttrTy::kPrecisionList,
                                     &operand_precision};
       if (!ParseOperands(&operands, /*expected_size=*/2) ||
@@ -922,13 +953,13 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       if (!feature_group_count) {
         feature_group_count = 1;
       }
-      PrecisionConfigProto precision_config;
+      PrecisionConfig precision_config;
       if (operand_precision) {
         *precision_config.mutable_operand_precision() = {
             operand_precision->begin(), operand_precision->end()};
       } else {
         precision_config.mutable_operand_precision()->Resize(
-            operands.size(), PrecisionConfigProto::DEFAULT);
+            operands.size(), PrecisionConfig::DEFAULT);
       }
       instruction = builder->AddInstruction(HloInstruction::CreateConvolve(
           shape, /*lhs=*/operands[0], /*rhs=*/operands[1],
@@ -1248,11 +1279,14 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       optional<string> custom_call_target;
       optional<Window> window;
       optional<ConvolutionDimensionNumbers> dnums;
+      optional<int64> feature_group_count;
       attrs["custom_call_target"] = {/*required=*/true, AttrTy::kString,
                                      &custom_call_target};
       attrs["window"] = {/*required=*/false, AttrTy::kWindow, &window};
       attrs["dim_labels"] = {/*required=*/false,
                              AttrTy::kConvolutionDimensionNumbers, &dnums};
+      attrs["feature_group_count"] = {/*required=*/false, AttrTy::kInt64,
+                                      &feature_group_count};
       if (!ParseOperands(&operands) || !ParseAttributes(attrs)) {
         return false;
       }
@@ -1263,6 +1297,9 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       }
       if (dnums.has_value()) {
         instruction->set_convolution_dimension_numbers(*dnums);
+      }
+      if (feature_group_count.has_value()) {
+        instruction->set_feature_group_count(*feature_group_count);
       }
       break;
     }
@@ -1279,7 +1316,7 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       optional<std::vector<tensorflow::int64>> rhs_batch_dims;
       attrs["rhs_batch_dims"] = {/*required=*/false, AttrTy::kBracedInt64List,
                                  &rhs_batch_dims};
-      optional<std::vector<PrecisionConfigProto::Precision>> operand_precision;
+      optional<std::vector<PrecisionConfig::Precision>> operand_precision;
       attrs["operand_precision"] = {/*required=*/false, AttrTy::kPrecisionList,
                                     &operand_precision};
 
@@ -1306,13 +1343,13 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
                                                 rhs_batch_dims->end()};
       }
 
-      PrecisionConfigProto precision_config;
+      PrecisionConfig precision_config;
       if (operand_precision) {
         *precision_config.mutable_operand_precision() = {
             operand_precision->begin(), operand_precision->end()};
       } else {
         precision_config.mutable_operand_precision()->Resize(
-            operands.size(), PrecisionConfigProto::DEFAULT);
+            operands.size(), PrecisionConfig::DEFAULT);
       }
 
       instruction = builder->AddInstruction(HloInstruction::CreateDot(
@@ -2410,11 +2447,11 @@ bool HloParser::ParseAttributeHelper(
         return ParseDomain(static_cast<DomainData*>(attr_out_ptr));
       }
       case AttrTy::kPrecisionList: {
-        std::vector<PrecisionConfigProto::Precision> result;
+        std::vector<PrecisionConfig::Precision> result;
         if (!ParsePrecisionList(&result)) {
           return false;
         }
-        static_cast<optional<std::vector<PrecisionConfigProto::Precision>>*>(
+        static_cast<optional<std::vector<PrecisionConfig::Precision>>*>(
             attr_out_ptr)
             ->emplace(result);
         return true;
@@ -2698,9 +2735,9 @@ bool HloParser::ParseSliceRanges(SliceRanges* result) {
 //   ::= /*empty*/
 //   ::= precision_val (delim precision_val)*
 bool HloParser::ParsePrecisionList(
-    std::vector<PrecisionConfigProto::Precision>* result) {
+    std::vector<PrecisionConfig::Precision>* result) {
   auto parse_and_add_item = [&]() {
-    PrecisionConfigProto::Precision item;
+    PrecisionConfig::Precision item;
     if (!ParsePrecision(&item)) {
       return false;
     }
@@ -3032,7 +3069,7 @@ bool HloParser::ParseRandomDistribution(RandomDistribution* result) {
   return true;
 }
 
-bool HloParser::ParsePrecision(PrecisionConfigProto::Precision* result) {
+bool HloParser::ParsePrecision(PrecisionConfig::Precision* result) {
   VLOG(1) << "ParsePrecision";
   if (lexer_.GetKind() != TokKind::kIdent) {
     return TokenError("expects random distribution");

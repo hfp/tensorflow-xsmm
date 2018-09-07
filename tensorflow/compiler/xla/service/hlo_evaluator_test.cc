@@ -52,10 +52,7 @@ static std::array<bool, 2> use_bf16_params{true, false};
 class HloEvaluatorTest : public ::testing::WithParamInterface<bool>,
                          public HloVerifiedTestBase {
  protected:
-  HloEvaluatorTest()
-      : HloVerifiedTestBase(/*layout_sensitive=*/false,
-                            /*allow_mixed_precision=*/false),
-        use_bfloat16_(GetParam()) {
+  HloEvaluatorTest() : HloVerifiedTestBase(), use_bfloat16_(GetParam()) {
     evaluator_ = absl::make_unique<HloEvaluator>();
   }
 
@@ -620,13 +617,6 @@ TEST_P(HloEvaluatorTest, NegativeAndInteriorPadding2D) {
   auto expected = LiteralUtil::CreateR2FromArray2D<float>(*expected_array);
 
   EXPECT_TRUE(LiteralTestUtil::Equal(*expected, *result));
-}
-
-PrecisionConfigProto DefaultPrecisionConfig(int operands) {
-  PrecisionConfigProto precision_config;
-  precision_config.mutable_operand_precision()->Resize(
-      operands, PrecisionConfigProto::DEFAULT);
-  return precision_config;
 }
 
 TEST_P(HloEvaluatorTest, DotRank2AndRank1) {
