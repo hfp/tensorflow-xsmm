@@ -29,14 +29,14 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+#include "tensorflow/compiler/xla/tests/hlo_verified_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/gtl/flatmap.h"
 
 namespace xla {
 namespace {
 
-class MinimumMemoryForSequenceTest : public HloTestBase {};
+class MinimumMemoryForSequenceTest : public HloVerifiedTestBase {};
 
 TEST_F(MinimumMemoryForSequenceTest, MultiComputation) {
   auto module = CreateNewModule();
@@ -86,7 +86,7 @@ TEST_F(MinimumMemoryForSequenceTest, MultiComputation) {
     return ShapeUtil::ByteSizeOf(buffer.shape(), /*pointer_size=*/8);
   };
 
-  HloSchedule schedule(module.get());
+  HloSchedule schedule(module);
   schedule.set_sequence(cond_computation,
                         {cond_param, cond_iter, cond_data, cond_lt});
   schedule.set_sequence(body_computation, {body_param});
@@ -233,7 +233,7 @@ class HeapSimulatorTracker {
   HeapSimulator::Result result_;
 };
 
-class HeapSimulatorTest : public HloTestBase {
+class HeapSimulatorTest : public HloVerifiedTestBase {
  protected:
   HeapSimulatorTest() {}
   ~HeapSimulatorTest() override {}
@@ -1019,6 +1019,136 @@ TEST_F(LazyBestFitHeapTest, Alignment) {
   EXPECT_EQ(64, result.chunk_map.at(buffer_c_).offset);
   EXPECT_EQ(0, result.chunk_map.at(buffer_d_).offset);
   EXPECT_EQ(128, result.chunk_map.at(buffer_e_).offset);
+}
+
+class GlobalDecreasingSizeBestFitHeapTest : public HeapAlgorithmTestBase {};
+
+TEST_F(GlobalDecreasingSizeBestFitHeapTest, Empty) {
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
+  const HeapSimulator::Result result = heap.Finish();
+  EXPECT_EQ(0, result.heap_size);
+  EXPECT_EQ(0, result.chunk_map.size());
+}
+
+TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSize) {
+  // space
+  //   ^
+  //   |  +---a---+
+  //   |      +-------+
+  //   |      +---c---+
+  //   |    +-------+
+  //   |    |   b   |
+  //   |    +-------+
+  //   |         +-------+
+  //   |         |       |
+  //   |         |   d   |
+  //   |         +-------+
+  //   -----------------> time
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
+  heap.Alloc(buffer_a_, 10);
+  heap.Alloc(buffer_b_, 30);
+  heap.Alloc(buffer_c_, 20);
+  heap.Alloc(buffer_d_, 40);
+  heap.Free(buffer_a_, 10);
+  heap.Free(buffer_b_, 30);
+  heap.Free(buffer_c_, 20);
+  heap.Free(buffer_d_, 40);
+
+  const HeapSimulator::Result result = heap.Finish();
+  EXPECT_EQ(100, result.heap_size);
+  EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
+  EXPECT_EQ(30, result.chunk_map.at(buffer_b_).size);
+  EXPECT_EQ(20, result.chunk_map.at(buffer_c_).size);
+  EXPECT_EQ(40, result.chunk_map.at(buffer_d_).size);
+
+  EXPECT_EQ(90, result.chunk_map.at(buffer_a_).offset);
+  EXPECT_EQ(40, result.chunk_map.at(buffer_b_).offset);
+  EXPECT_EQ(70, result.chunk_map.at(buffer_c_).offset);
+  EXPECT_EQ(0, result.chunk_map.at(buffer_d_).offset);
+}
+
+TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSizeWithAlignment) {
+  // space
+  //   ^
+  //   |      +-------+
+  //   |      +---b---+
+  //   |            +-------+
+  //   |            |       |
+  //   |            |   d   |
+  //   |  +---a---+ +-------+
+  //   |
+  //   |         +-------+
+  //   |         |       |
+  //   |         |   c   |
+  //   |         |       |
+  //   |         +-------+
+  //   ---------------------> time
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/20);
+  heap.Alloc(buffer_a_, 10);
+  heap.Alloc(buffer_b_, 20);
+  heap.Alloc(buffer_c_, 50);
+  heap.Free(buffer_a_, 10);
+  heap.Alloc(buffer_d_, 40);
+  heap.Free(buffer_b_, 20);
+  heap.Free(buffer_c_, 50);
+  heap.Free(buffer_d_, 40);
+
+  const HeapSimulator::Result result = heap.Finish();
+  EXPECT_EQ(120, result.heap_size);
+  EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
+  EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
+  EXPECT_EQ(50, result.chunk_map.at(buffer_c_).size);
+  EXPECT_EQ(40, result.chunk_map.at(buffer_d_).size);
+
+  EXPECT_EQ(60, result.chunk_map.at(buffer_a_).offset);
+  EXPECT_EQ(100, result.chunk_map.at(buffer_b_).offset);
+  EXPECT_EQ(0, result.chunk_map.at(buffer_c_).offset);
+  EXPECT_EQ(60, result.chunk_map.at(buffer_d_).offset);
+}
+
+TEST_F(GlobalDecreasingSizeBestFitHeapTest, BestFit) {
+  // space
+  //   ^
+  //   |    +-------+
+  //   |    +---b---+
+  //   |         +-------+
+  //   |         |   d   |
+  //   | +--a--+ +-------+
+  //   |      +-------+
+  //   |      |       |
+  //   |      |   c   |
+  //   |      +-------+
+  //   |           +-------+
+  //   |           |       |
+  //   |           |   e   |
+  //   |           |       |
+  //   |           +-------+
+  //   ---------------------> time
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
+  heap.Alloc(buffer_a_, 10);
+  heap.Alloc(buffer_b_, 20);
+  heap.Alloc(buffer_c_, 40);
+  heap.Free(buffer_a_, 10);
+  heap.Alloc(buffer_d_, 30);
+  heap.Alloc(buffer_e_, 50);
+  heap.Free(buffer_b_, 20);
+  heap.Free(buffer_c_, 40);
+  heap.Free(buffer_d_, 30);
+  heap.Free(buffer_e_, 50);
+
+  const HeapSimulator::Result result = heap.Finish();
+  EXPECT_EQ(140, result.heap_size);
+  EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
+  EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
+  EXPECT_EQ(40, result.chunk_map.at(buffer_c_).size);
+  EXPECT_EQ(30, result.chunk_map.at(buffer_d_).size);
+  EXPECT_EQ(50, result.chunk_map.at(buffer_e_).size);
+
+  EXPECT_EQ(90, result.chunk_map.at(buffer_a_).offset);
+  EXPECT_EQ(120, result.chunk_map.at(buffer_b_).offset);
+  EXPECT_EQ(50, result.chunk_map.at(buffer_c_).offset);
+  EXPECT_EQ(90, result.chunk_map.at(buffer_d_).offset);
+  EXPECT_EQ(0, result.chunk_map.at(buffer_e_).offset);
 }
 
 }  // namespace

@@ -37,11 +37,12 @@ namespace tensorflow {
 class AllocationDescription;
 class Allocator;
 class OpKernelContext;
+class Tensor;
 class TensorBuffer;
 class TensorCApi;
 class TensorDescription;
 class TensorProto;
-class VariantTensorData;
+
 namespace batch_util {
 Status CopyElementToSlice(Tensor element, Tensor* parent, int64 index);
 Status MaybeMoveSliceToElement(Tensor* parent, Tensor* element, int64 index);
@@ -153,7 +154,7 @@ class Tensor {
   /// Returns the estimated memory usage of this tensor.
   size_t TotalBytes() const;
 
-  // Returns the size of sallocated memory for this tensor.
+  // Returns the size of allocated memory for this tensor.
   size_t AllocatedBytes() const;
 
   /// Returns true iff this tensor is aligned.
@@ -429,7 +430,7 @@ class Tensor {
       int64 begin) const;
 
   /// Render the first `max_entries` values in `*this` into a string.
-  string SummarizeValue(int64 max_entries) const;
+  string SummarizeValue(int64 max_entries, bool print_v2 = false) const;
 
   /// A human-readable summary of the tensor suitable for debugging.
   string DebugString() const;

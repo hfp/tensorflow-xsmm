@@ -264,7 +264,11 @@ class NestTest(parameterized.TestCase, test.TestCase):
          "Second structure:.*\n\n"
          "More specifically: Substructure "
          r'"type=tuple str=\(\(1, 2\), 3\)" is a sequence, while '
-         'substructure "type=str str=spam" is not')):
+         'substructure "type=str str=spam" is not\n'
+         "Entire first structure:\n"
+         r"\(\(\(\., \.\), \.\), \., \(\., \.\)\)\n"
+         "Entire second structure:\n"
+         r"\(\., \.\)")):
       nest.assert_same_structure(structure1, structure_different_num_elements)
 
     with self.assertRaisesRegexp(
@@ -461,7 +465,7 @@ class NestTest(parameterized.TestCase, test.TestCase):
         inp_b: (np.random.randn(3, 4), np.random.randn(3, 7))
     }
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       output_np = sess.run(output, feed_dict=feed_dict)
     self.assertAllClose(output_np[0],
                         feed_dict[inp_a][0] + feed_dict[inp_b][0])

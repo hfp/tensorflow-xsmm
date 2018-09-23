@@ -64,14 +64,11 @@ class HloParser {
  public:
   using LocTy = HloLexer::LocTy;
 
-  explicit HloParser(absl::string_view str, const HloModuleConfig& config)
-      : lexer_(str), config_(config) {}
+  explicit HloParser(absl::string_view str) : lexer_(str) {}
 
-  // Runs the parser. Returns false if an error occurred.
-  bool Run();
-
-  // Returns the parsed HloModule.
-  std::unique_ptr<HloModule> ConsumeHloModule() { return std::move(module_); }
+  // Runs the parser and constructs the resulting HLO in the given (empty)
+  // HloModule. Returns false if an error occurred.
+  bool Run(HloModule* module);
 
   // Returns the error information.
   string GetError() const { return StrJoin(error_, "\n"); }
@@ -98,23 +95,20 @@ class HloParser {
       const string& name, const optional<Shape>& shape = nullopt);
 
   // ParseXXX returns false if an error occurred.
-  bool ParseHloModule();
-  bool ParseComputations();
+  bool ParseHloModule(HloModule* module);
+  bool ParseComputations(HloModule* module);
   bool ParseComputation(HloComputation** entry_computation);
   bool ParseInstructionList(HloComputation::Builder* builder,
                             string* root_name);
   bool ParseInstruction(HloComputation::Builder* builder, string* root_name);
   bool ParseControlPredecessors(HloInstruction* instruction);
-  bool ParseLiteral(std::unique_ptr<Literal>* literal, const Shape& shape);
-  bool ParseTupleLiteral(std::unique_ptr<Literal>* literal, const Shape& shape);
-  bool ParseNonTupleLiteral(std::unique_ptr<Literal>* literal,
-                            const Shape& shape);
-  bool ParseDenseLiteral(std::unique_ptr<Literal>* literal, const Shape& shape);
-  bool ParseSparseLiteral(std::unique_ptr<Literal>* literal,
-                          const Shape& shape);
+  bool ParseLiteral(Literal* literal, const Shape& shape);
+  bool ParseTupleLiteral(Literal* literal, const Shape& shape);
+  bool ParseNonTupleLiteral(Literal* literal, const Shape& shape);
+  bool ParseDenseLiteral(Literal* literal, const Shape& shape);
+  bool ParseSparseLiteral(Literal* literal, const Shape& shape);
   template <typename LiteralNativeT>
-  bool ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
-                                const Shape& shape);
+  bool ParseSparseLiteralHelper(Literal* literal, const Shape& shape);
 
   // Sets the sub-value of literal at the given index to the given value. The
   // literal's shape must have the default layout.
@@ -296,9 +290,7 @@ class HloParser {
       computation_pool_;
 
   HloLexer lexer_;
-  std::unique_ptr<HloModule> module_;
   std::vector<std::unique_ptr<HloComputation>> computations_;
-  const HloModuleConfig config_;
   std::vector<string> error_;
 
   // Function that gets invoked when we try to resolve an instruction
@@ -352,9 +344,9 @@ bool HloParser::TokenError(absl::string_view msg) {
   return Error(lexer_.GetLoc(), msg);
 }
 
-bool HloParser::Run() {
+bool HloParser::Run(HloModule* module) {
   lexer_.Lex();
-  return ParseHloModule();
+  return ParseHloModule(module);
 }
 
 std::pair<HloInstruction*, HloParser::LocTy>* HloParser::FindInstruction(
@@ -369,7 +361,7 @@ std::pair<HloInstruction*, HloParser::LocTy>* HloParser::FindInstruction(
 }
 
 // ::= 'HloModule' name computations
-bool HloParser::ParseHloModule() {
+bool HloParser::ParseHloModule(HloModule* module) {
   if (lexer_.GetKind() != TokKind::kw_HloModule) {
     return TokenError("expects HloModule");
   }
@@ -388,22 +380,20 @@ bool HloParser::ParseHloModule() {
     return false;
   }
 
-  module_ = absl::make_unique<HloModule>(name, config_);
-
-  if (!ParseComputations()) {
+  module->set_name(name);
+  if (!ParseComputations(module)) {
     return false;
   }
 
   if (is_scheduled.has_value() && *is_scheduled) {
-    TF_CHECK_OK(
-        module_->set_schedule(ScheduleFromInstructionOrder(module_.get())));
+    TF_CHECK_OK(module->set_schedule(ScheduleFromInstructionOrder(module)));
   }
 
   return true;
 }
 
 // computations ::= (computation)+
-bool HloParser::ParseComputations() {
+bool HloParser::ParseComputations(HloModule* module) {
   HloComputation* entry_computation = nullptr;
   do {
     if (!ParseComputation(&entry_computation)) {
@@ -419,21 +409,20 @@ bool HloParser::ParseComputations() {
     if ((entry_computation != nullptr &&
          computations_[i].get() != entry_computation) ||
         (entry_computation == nullptr && i != computations_.size() - 1)) {
-      module_->AddEmbeddedComputation(std::move(computations_[i]));
+      module->AddEmbeddedComputation(std::move(computations_[i]));
       continue;
     }
-    auto computation =
-        module_->AddEntryComputation(std::move(computations_[i]));
+    auto computation = module->AddEntryComputation(std::move(computations_[i]));
     // The parameters and result layouts were set to default layout. Here we
     // set the layouts to what the hlo text says.
     for (int p = 0; p < computation->num_parameters(); p++) {
       const Shape& param_shape = computation->parameter_instruction(p)->shape();
-      TF_CHECK_OK(module_->mutable_entry_computation_layout()
+      TF_CHECK_OK(module->mutable_entry_computation_layout()
                       ->mutable_parameter_layout(p)
                       ->CopyLayoutFromShape(param_shape));
     }
     const Shape& result_shape = computation->root_instruction()->shape();
-    TF_CHECK_OK(module_->mutable_entry_computation_layout()
+    TF_CHECK_OK(module->mutable_entry_computation_layout()
                     ->mutable_result_layout()
                     ->CopyLayoutFromShape(result_shape));
   }
@@ -577,7 +566,7 @@ bool HloParser::ParseInstruction(HloComputation::Builder* builder,
       break;
     }
     case HloOpcode::kConstant: {
-      std::unique_ptr<Literal> literal;
+      Literal literal;
       if (!ParseToken(TokKind::kLparen,
                       "expects '(' before constant literal") ||
           !ParseLiteral(&literal, shape) ||
@@ -1810,8 +1799,7 @@ bool HloParser::EatShapeAndCheckCompatible(const Shape& shape) {
 // literal
 //  ::= tuple
 //  ::= non_tuple
-bool HloParser::ParseLiteral(std::unique_ptr<Literal>* literal,
-                             const Shape& shape) {
+bool HloParser::ParseLiteral(Literal* literal, const Shape& shape) {
   return ShapeUtil::IsTuple(shape) ? ParseTupleLiteral(literal, shape)
                                    : ParseNonTupleLiteral(literal, shape);
 }
@@ -1821,8 +1809,7 @@ bool HloParser::ParseLiteral(std::unique_ptr<Literal>* literal,
 // literal_list
 //  ::= /*empty*/
 //  ::= literal (',' literal)*
-bool HloParser::ParseTupleLiteral(std::unique_ptr<Literal>* literal,
-                                  const Shape& shape) {
+bool HloParser::ParseTupleLiteral(Literal* literal, const Shape& shape) {
   if (!EatShapeAndCheckCompatible(shape)) {
     return TokenError(StrCat("expects tuple constant in shape ",
                              ShapeUtil::HumanString(shape)));
@@ -1830,8 +1817,7 @@ bool HloParser::ParseTupleLiteral(std::unique_ptr<Literal>* literal,
   if (!ParseToken(TokKind::kLparen, "expects '(' in front of tuple elements")) {
     return false;
   }
-  std::vector<std::unique_ptr<Literal>> elements(
-      ShapeUtil::TupleElementCount(shape));
+  std::vector<Literal> elements(ShapeUtil::TupleElementCount(shape));
 
   if (lexer_.GetKind() == TokKind::kRparen) {
     // empty
@@ -1857,8 +1843,7 @@ bool HloParser::ParseTupleLiteral(std::unique_ptr<Literal>* literal,
 //   ::= rank01
 //   ::= rank2345
 // rank2345 ::= shape sparse_or_nested_array
-bool HloParser::ParseNonTupleLiteral(std::unique_ptr<Literal>* literal,
-                                     const Shape& shape) {
+bool HloParser::ParseNonTupleLiteral(Literal* literal, const Shape& shape) {
   if (LayoutUtil::IsSparseArray(shape)) {
     return ParseSparseLiteral(literal, shape);
   }
@@ -1867,8 +1852,7 @@ bool HloParser::ParseNonTupleLiteral(std::unique_ptr<Literal>* literal,
   return ParseDenseLiteral(literal, shape);
 }
 
-bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
-                                  const Shape& shape) {
+bool HloParser::ParseDenseLiteral(Literal* literal, const Shape& shape) {
   const tensorflow::int64 rank = ShapeUtil::Rank(shape);
   if (rank > 1 && !EatShapeAndCheckCompatible(shape)) {
     return false;
@@ -1962,7 +1946,7 @@ bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
           // TODO(congliu): bool type literals with rank >= 1 are actually
           // printed in a compact form instead of "true" or "false". Fix that.
           if (!SetValueInLiteral(lexer_.GetKind() == TokKind::kw_true,
-                                 linear_index++, literal->get())) {
+                                 linear_index++, literal)) {
             return false;
           }
           lexer_.Lex();
@@ -1973,7 +1957,7 @@ bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
             return Error(loc, StrCat("expects integer for primitive type: ",
                                      PrimitiveType_Name(shape.element_type())));
           }
-          if (!SetValueInLiteral(value, linear_index++, literal->get())) {
+          if (!SetValueInLiteral(value, linear_index++, literal)) {
             return false;
           }
         } else if (primitive_util::IsFloatingPointType(shape.element_type())) {
@@ -1984,7 +1968,7 @@ bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
                 loc, StrCat("expect floating point value for primitive type: ",
                             PrimitiveType_Name(shape.element_type())));
           }
-          if (!SetValueInLiteral(value, linear_index++, literal->get())) {
+          if (!SetValueInLiteral(value, linear_index++, literal)) {
             return false;
           }
         } else {
@@ -1996,12 +1980,11 @@ bool HloParser::ParseDenseLiteral(std::unique_ptr<Literal>* literal,
     }  // end of switch
   } while (nest_level > 0);
 
-  *literal = (*literal)->Relayout(shape.layout());
+  *literal = literal->Relayout(shape.layout());
   return true;
 }
 
-bool HloParser::ParseSparseLiteral(std::unique_ptr<Literal>* literal,
-                                   const Shape& shape) {
+bool HloParser::ParseSparseLiteral(Literal* literal, const Shape& shape) {
   if (!EatShapeAndCheckCompatible(shape)) {
     return false;
   }
@@ -2041,13 +2024,12 @@ bool HloParser::ParseSparseLiteral(std::unique_ptr<Literal>* literal,
 }
 
 template <typename LiteralNativeT>
-bool HloParser::ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
-                                         const Shape& shape) {
+bool HloParser::ParseSparseLiteralHelper(Literal* literal, const Shape& shape) {
   std::vector<tensorflow::int64> index;
 
   tensorflow::int64 rank = ShapeUtil::Rank(shape);
 
-  *literal = absl::make_unique<Literal>(shape);
+  *literal = Literal(shape);
 
   if (!ParseToken(TokKind::kLbrace,
                   "expects '{' at the beginning of a sparse literal")) {
@@ -2121,7 +2103,7 @@ bool HloParser::ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
       return false;
     }
 
-    if ((*literal)->sparse_element_count() + 1 ==
+    if (literal->sparse_element_count() + 1 ==
         LayoutUtil::MaxSparseElements(shape.layout())) {
       return Error(
           lexer_.GetLoc(),
@@ -2129,10 +2111,10 @@ bool HloParser::ParseSparseLiteralHelper(std::unique_ptr<Literal>* literal,
                  ShapeUtil::HumanStringWithLayout(shape)));
     }
 
-    (*literal)->AppendSparseElement(index, value);
+    literal->AppendSparseElement(index, value);
   }
 
-  (*literal)->SortSparseElements();
+  literal->SortSparseElements();
   return true;
 }
 
@@ -3257,53 +3239,62 @@ Status HloParser::ParseSingleInstruction(HloComputation::Builder* builder,
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloString(
     absl::string_view str, const HloModuleConfig& config) {
-  HloParser parser(str, config);
-  if (!parser.Run()) {
+  auto module = absl::make_unique<HloModule>(/*name=*/"", config);
+  HloParser parser(str);
+  if (!parser.Run(module.get())) {
     return InvalidArgument("Syntax error:\n%s", parser.GetError());
   }
-  return parser.ConsumeHloModule();
+  return std::move(module);
 }
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloString(absl::string_view str) {
-  HloModuleConfig config;
-  return ParseHloString(str, config);
+  auto module = absl::make_unique<HloModule>(/*name=*/"", HloModuleConfig());
+  HloParser parser(str);
+  if (!parser.Run(module.get())) {
+    return InvalidArgument("Syntax error:\n%s", parser.GetError());
+  }
+  return std::move(module);
+}
+
+Status ParseHloString(absl::string_view str, HloModule* module) {
+  TF_RET_CHECK(module->computation_count() == 0);
+  HloParser parser(str);
+  if (!parser.Run(module)) {
+    return InvalidArgument("Syntax error:\n%s", parser.GetError());
+  }
+  return Status::OK();
 }
 
 StatusOr<std::unique_ptr<HloModule>> ParseHloOpToModule(
     absl::string_view str, absl::string_view name) {
-  HloModuleConfig config;
-  HloParser parser(str, config);
+  HloParser parser(str);
   auto builder = absl::make_unique<HloComputation::Builder>(string(name));
   string root_name;
   TF_RETURN_IF_ERROR(parser.ParseSingleInstruction(builder.get(), &root_name));
   std::unique_ptr<HloComputation> computation = builder->Build();
-  auto module = absl::make_unique<HloModule>(string(name), config);
+  auto module = absl::make_unique<HloModule>(string(name), HloModuleConfig());
   module->AddEntryComputation(std::move(computation));
   return std::move(module);
 }
 
 StatusOr<HloSharding> ParseSharding(absl::string_view str) {
-  HloModuleConfig config;
-  HloParser parser(str, config);
+  HloParser parser(str);
   return parser.ParseShardingOnly();
 }
 
 StatusOr<Window> ParseWindow(absl::string_view str) {
-  HloModuleConfig config;
-  HloParser parser(str, config);
+  HloParser parser(str);
   return parser.ParseWindowOnly();
 }
 
 StatusOr<ConvolutionDimensionNumbers> ParseConvolutionDimensionNumbers(
     absl::string_view str) {
-  HloModuleConfig config;
-  HloParser parser(str, config);
+  HloParser parser(str);
   return parser.ParseConvolutionDimensionNumbersOnly();
 }
 
 StatusOr<PaddingConfig> ParsePaddingConfig(absl::string_view str) {
-  HloModuleConfig config;
-  HloParser parser(str, config);
+  HloParser parser(str);
   return parser.ParsePaddingConfigOnly();
 }
 
