@@ -65,7 +65,6 @@ cc_library(
         "include/libxsmm_dispatch.h",
     ]) + [
         # source files included internally
-        "src/libxsmm_gemm_diff.c",
         "src/libxsmm_hash.c",
         # generated header files
         "include/libxsmm.h",
