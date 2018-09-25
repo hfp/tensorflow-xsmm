@@ -217,6 +217,19 @@ tf_kernel_library(
     ],
 )
 
+tf_kernel_library(
+    name = "extract_volume_patches_op",
+    prefix = "extract_volume_patches_op",
+    deps = [
+        ":bounds_check",
+        ":eigen_helpers",
+        ":ops_util",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//third_party/eigen3",
+    ],
+)
+
 cc_library(
     name = "conv_3d",
     hdrs = ["conv_3d.h"],
@@ -622,6 +635,7 @@ cc_library(
         ":diag_op",
         ":edit_distance_op",
         ":extract_image_patches_op",
+        ":extract_volume_patches_op",
         ":gather_nd_op",
         ":gather_op",
         ":guarantee_const_op",
@@ -4420,8 +4434,16 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "string_util",
+    srcs = ["string_util.cc"],
+    hdrs = ["string_util.h"],
+    deps = ["//tensorflow/core:lib"],
+)
+
 STRING_DEPS = [
     ":bounds_check",
+    ":string_util",
     "//third_party/eigen3",
     "//tensorflow/core:framework",
     "//tensorflow/core:lib",
@@ -5152,6 +5174,7 @@ filegroup(
         "spacetobatch_functor.h",
         "spacetodepth_op.h",
         "spectrogram.h",
+        "string_util.h",
         "tensor_array.h",
         "tile_functor.h",
         "tile_ops_cpu_impl.h",
@@ -5320,6 +5343,7 @@ filegroup(
         "spectrogram_op.cc",
         "stack_ops.cc",
         "string_join_op.cc",
+        "string_util.cc",
         "summary_op.cc",
         "tensor_array.cc",
         "tensor_array_ops.cc",
