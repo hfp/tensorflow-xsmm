@@ -107,7 +107,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         print("path_prefix was specified to tf_workspace but is no longer used " +
               "and will be removed in the future.")
 
-    tf_http_archive(
+    native.new_http_archive(
         name = "mkl_dnn",
         build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
         sha256 = "363cc9239eacf8e7917753c6d8c94f767e4cd049160d0654a61ef32d5e1b3049",
@@ -129,7 +129,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    tf_http_archive(
+    native.new_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
         sha256 = "07069834d35aebd2d3e9744f4692b29b9aa678fa2b19237c518ee058311ab059",
@@ -152,7 +152,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    tf_http_archive(
+    native.new_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
         sha256 = "f38cb586a039a24a5a18342d86597a05f43fe7d8af94fdf333179df3649fee03",
