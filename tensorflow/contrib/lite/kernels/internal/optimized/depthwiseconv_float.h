@@ -841,33 +841,6 @@ inline void FloatDepthwiseConvAccumRowGeneric(
     int filter_width, const float* filter_data, int out_x_buffer_start,
     int out_x_buffer_end, int output_depth, float* acc_buffer) {
   gemmlowp::ScopedProfilingLabel label("DepthwiseConvAccumRowGeneric (slow)");
-#ifdef TFLITE_PREVENT_SLOW_GENERIC_DEPTHWISECONV_FALLBACK
-#ifndef ALLOW_SLOW_GENERIC_DEPTHWISECONV_FALLBACK
-  LOG(FATAL)
-      << "\n\n"
-      << "*****************************************************************\n"
-      << "* This tfmini inference code was about to use the slow generic\n"
-      << "* fallback implementation for a DepthwiseConv op, and we want you\n"
-      << "* to be aware of that so that you will know why you get terrible\n"
-      << "* performance.\n"
-      << "*\n"
-      << "* If you would like to carry on with the slow code, compile\n"
-      << "* with this preprocessor token defined:\n"
-      << "* ALLOW_SLOW_GENERIC_DEPTHWISECONV_FALLBACK.\n"
-      << "*\n"
-      << "* The right thing to do, if you care about performance, is to add\n"
-      << "* a new DepthwiseConv kernel to tfmini to cover your case.\n"
-      << "* The relevant parameters defining your case are:\n"
-      << "* stride = " << stride << "\n"
-      << "* input_depth = " << input_depth << "\n"
-      << "* depth_multiplier = " << depth_multiplier << "\n"
-      << "* dilation_factor = " << dilation_factor << "\n"
-      << "*\n"
-      << "* Please do not hesitate to contact benoitjacob@ with this\n"
-      << "* information.\n"
-      << "*****************************************************************\n";
-#endif  // ALLOW_SLOW_GENERIC_DEPTHWISECONV_FALLBACK
-#endif  // TFLITE_PREVENT_SLOW_GENERIC_DEPTHWISECONV_FALLBACK
   const float* filter_base_ptr = filter_data;
   for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
     const int out_x_loop_start = std::max(
@@ -1090,80 +1063,6 @@ inline void DepthwiseConv(
       }
     }
   }
-}
-
-// TODO(b/80418076): Move to legacy ops file, update invocations.
-// Legacy.
-inline void DepthwiseConv(const float* input_data, const Dims<4>& input_dims,
-                          const float* filter_data, const Dims<4>& filter_dims,
-                          const float* bias_data, const Dims<4>& bias_dims,
-                          int stride_width, int stride_height,
-                          int dilation_width_factor, int dilation_height_factor,
-                          int pad_width, int pad_height, int depth_multiplier,
-                          float output_activation_min,
-                          float output_activation_max, float* output_data,
-                          const Dims<4>& output_dims) {
-  tflite::DepthwiseParams op_params;
-  // Padding type is ignored, but still set.
-  op_params.padding_type = PaddingType::kSame;
-  op_params.padding_values.width = pad_width;
-  op_params.padding_values.height = pad_height;
-  op_params.stride_width = stride_width;
-  op_params.stride_height = stride_height;
-  op_params.dilation_width_factor = dilation_width_factor;
-  op_params.dilation_height_factor = dilation_height_factor;
-  op_params.depth_multiplier = depth_multiplier;
-  op_params.float_activation_min = output_activation_min;
-  op_params.float_activation_max = output_activation_max;
-
-  DepthwiseConv(op_params, DimsToShape(input_dims), input_data,
-                DimsToShape(filter_dims), filter_data, DimsToShape(bias_dims),
-                bias_data, DimsToShape(output_dims), output_data);
-}
-
-// TODO(b/80418076): Move to legacy ops file, update invocations.
-inline void DepthwiseConv(const float* input_data, const Dims<4>& input_dims,
-                          const float* filter_data, const Dims<4>& filter_dims,
-                          const float* bias_data, const Dims<4>& bias_dims,
-                          int stride_width, int stride_height, int pad_width,
-                          int pad_height, int depth_multiplier,
-                          float output_activation_min,
-                          float output_activation_max, float* output_data,
-                          const Dims<4>& output_dims) {
-  DepthwiseConv(input_data, input_dims, filter_data, filter_dims, bias_data,
-                bias_dims, stride_width, stride_height, 1, 1, pad_width,
-                pad_height, depth_multiplier, output_activation_min,
-                output_activation_max, output_data, output_dims);
-}
-
-// TODO(b/80418076): Move to legacy ops file, update invocations.
-// legacy, for compatibility with old checked-in code
-template <FusedActivationFunctionType Ac>
-void DepthwiseConv(const float* input_data, const Dims<4>& input_dims,
-                   const float* filter_data, const Dims<4>& filter_dims,
-                   const float* bias_data, const Dims<4>& bias_dims,
-                   int stride_width, int stride_height, int pad_width,
-                   int pad_height, int depth_multiplier, float* output_data,
-                   const Dims<4>& output_dims) {
-  float output_activation_min, output_activation_max;
-  GetActivationMinMax(Ac, &output_activation_min, &output_activation_max);
-  DepthwiseConv(input_data, input_dims, filter_data, filter_dims, bias_data,
-                bias_dims, stride_width, stride_height, pad_width, pad_height,
-                depth_multiplier, output_activation_min, output_activation_max,
-                output_data, output_dims);
-}
-
-// TODO(b/80418076): Move to legacy ops file, update invocations.
-// legacy, for compatibility with old checked-in code
-template <FusedActivationFunctionType Ac>
-void DepthwiseConv(const float* input_data, const Dims<4>& input_dims,
-                   const float* filter_data, const Dims<4>& filter_dims,
-                   const float* bias_data, const Dims<4>& bias_dims, int stride,
-                   int pad_width, int pad_height, int depth_multiplier,
-                   float* output_data, const Dims<4>& output_dims) {
-  DepthwiseConv<Ac>(input_data, input_dims, filter_data, filter_dims, bias_data,
-                    bias_dims, stride, stride, pad_width, pad_height,
-                    depth_multiplier, output_data, output_dims);
 }
 
 }  // namespace optimized_ops

@@ -7,7 +7,6 @@ exports_files(["LICENSE"])
 
 package(default_visibility = ["//visibility:public"])
 
-load("@pip_deps//:requirements.bzl", "requirement")
 load("//tensorflow:tensorflow.bzl", "py_test")
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 
@@ -63,7 +62,7 @@ py_library(
         ":backend",
         ":engine",
         ":layers",
-        requirement("keras_applications"),
+        "//tensorflow/python/keras/optimizer_v2:optimizer_v2",
         "//tensorflow/python/saved_model",
         "//tensorflow/python:training",
     ],
@@ -686,6 +685,19 @@ py_test(
     name = "training_test",
     size = "enormous",
     srcs = ["engine/training_test.py"],
+    srcs_version = "PY2AND3",
+    tags = ["notsan"],
+    deps = [
+        ":keras",
+        "//tensorflow/python:client_testlib",
+        "//third_party/py/numpy",
+    ],
+)
+
+py_test(
+    name = "training_generator_test",
+    size = "enormous",
+    srcs = ["engine/training_generator_test.py"],
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [

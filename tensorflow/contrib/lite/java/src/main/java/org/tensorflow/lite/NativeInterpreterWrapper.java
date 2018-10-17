@@ -18,7 +18,6 @@ package org.tensorflow.lite;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,6 +44,9 @@ final class NativeInterpreterWrapper implements AutoCloseable {
     isMemoryAllocated = true;
     inputTensors = new Tensor[getInputCount(interpreterHandle)];
     outputTensors = new Tensor[getOutputCount(interpreterHandle)];
+    if (options.allowFp16PrecisionForFp32) {
+      setAllowFp16PrecisionForFp32(options.allowFp16PrecisionForFp32);
+    }
   }
 
   NativeInterpreterWrapper(ByteBuffer byteBuffer) {
@@ -72,11 +74,27 @@ final class NativeInterpreterWrapper implements AutoCloseable {
     if (options.useNNAPI) {
       setUseNNAPI(options.useNNAPI);
     }
+    if (options.allowFp16PrecisionForFp32) {
+      setAllowFp16PrecisionForFp32(options.allowFp16PrecisionForFp32);
+    }
   }
 
   /** Releases resources associated with this {@code NativeInterpreterWrapper}. */
   @Override
   public void close() {
+    // Close the tensors first as they may reference the native interpreter.
+    for (int i = 0; i < inputTensors.length; ++i) {
+      if (inputTensors[i] != null) {
+        inputTensors[i].close();
+        inputTensors[i] = null;
+      }
+    }
+    for (int i = 0; i < outputTensors.length; ++i) {
+      if (outputTensors[i] != null) {
+        outputTensors[i].close();
+        outputTensors[i] = null;
+      }
+    }
     delete(errorHandle, modelHandle, interpreterHandle);
     errorHandle = 0;
     modelHandle = 0;
@@ -85,8 +103,6 @@ final class NativeInterpreterWrapper implements AutoCloseable {
     inputsIndexes = null;
     outputsIndexes = null;
     isMemoryAllocated = false;
-    Arrays.fill(inputTensors, null);
-    Arrays.fill(outputTensors, null);
   }
 
   /** Sets inputs, runs model inference and returns outputs. */
@@ -157,6 +173,10 @@ final class NativeInterpreterWrapper implements AutoCloseable {
 
   void setUseNNAPI(boolean useNNAPI) {
     useNNAPI(interpreterHandle, useNNAPI);
+  }
+
+  void setAllowFp16PrecisionForFp32(boolean allow) {
+    allowFp16PrecisionForFp32(interpreterHandle, allow);
   }
 
   void setNumThreads(int numThreads) {
@@ -250,7 +270,8 @@ final class NativeInterpreterWrapper implements AutoCloseable {
     Tensor inputTensor = inputTensors[index];
     if (inputTensor == null) {
       inputTensor =
-          inputTensors[index] = Tensor.fromHandle(getInputTensor(interpreterHandle, index));
+          inputTensors[index] =
+              Tensor.fromIndex(interpreterHandle, getInputTensorIndex(interpreterHandle, index));
     }
     return inputTensor;
   }
@@ -272,7 +293,8 @@ final class NativeInterpreterWrapper implements AutoCloseable {
     Tensor outputTensor = outputTensors[index];
     if (outputTensor == null) {
       outputTensor =
-          outputTensors[index] = Tensor.fromHandle(getOutputTensor(interpreterHandle, index));
+          outputTensors[index] =
+              Tensor.fromIndex(interpreterHandle, getOutputTensorIndex(interpreterHandle, index));
     }
     return outputTensor;
   }
@@ -307,9 +329,9 @@ final class NativeInterpreterWrapper implements AutoCloseable {
 
   private static native long allocateTensors(long interpreterHandle, long errorHandle);
 
-  private static native long getInputTensor(long interpreterHandle, int inputIdx);
+  private static native int getInputTensorIndex(long interpreterHandle, int inputIdx);
 
-  private static native long getOutputTensor(long interpreterHandle, int outputIdx);
+  private static native int getOutputTensorIndex(long interpreterHandle, int outputIdx);
 
   private static native int getInputCount(long interpreterHandle);
 
@@ -322,6 +344,8 @@ final class NativeInterpreterWrapper implements AutoCloseable {
   private static native void useNNAPI(long interpreterHandle, boolean state);
 
   private static native void numThreads(long interpreterHandle, int numThreads);
+
+  private static native void allowFp16PrecisionForFp32(long interpreterHandle, boolean allow);
 
   private static native long createErrorReporter(int size);
 

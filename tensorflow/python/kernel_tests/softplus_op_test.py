@@ -37,7 +37,7 @@ class SoftplusTest(test.TestCase):
 
   def _testSoftplus(self, np_features, use_gpu=False):
     np_softplus = self._npSoftplus(np_features)
-    with self.test_session(use_gpu=use_gpu):
+    with self.cached_session(use_gpu=use_gpu):
       softplus = nn_ops.softplus(np_features)
       tf_softplus = softplus.eval()
     self.assertAllCloseAccordingToType(np_softplus, tf_softplus)
@@ -126,7 +126,7 @@ class SoftplusTest(test.TestCase):
       with self.assertRaisesRegexp(
           TypeError,
           "'features' has DataType int32 not in list of allowed values"):
-        nn_ops.softplus(constant_op.constant(7)).eval()
+        nn_ops.softplus(constant_op.constant(42)).eval()
 
 
 if __name__ == "__main__":

@@ -958,6 +958,61 @@ tf_kernel_library(
     ]) + ARRAY_DEPS,
 )
 
+cc_library(
+    name = "ragged_ops",
+    deps = [
+        ":ragged_gather_op",
+        ":ragged_range_op",
+    ],
+)
+
+tf_kernel_library(
+    name = "ragged_gather_op",
+    srcs = ["ragged_gather_op.cc"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:ragged_array_ops_op_lib",
+    ],
+)
+
+tf_kernel_library(
+    name = "ragged_range_op",
+    srcs = ["ragged_range_op.cc"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:ragged_math_ops_op_lib",
+    ],
+)
+
+tf_cc_test(
+    name = "ragged_gather_op_test",
+    size = "small",
+    srcs = ["ragged_gather_op_test.cc"],
+    deps = [
+        ":ragged_gather_op",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:ragged_array_ops_op_lib",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+        "//tensorflow/core/kernels:ops_testutil",
+    ],
+)
+
+tf_cc_test(
+    name = "ragged_range_op_test",
+    srcs = ["ragged_range_op_test.cc"],
+    deps = [
+        ":ragged_range_op",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:ragged_math_ops_op_lib",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+        "//tensorflow/core/kernels:ops_testutil",
+    ],
+)
+
 tf_kernel_library(
     name = "cudnn_rnn_kernels",
     srcs = ["cudnn_rnn_ops.cc"],
@@ -1197,8 +1252,10 @@ tf_cc_test(
 
 tf_cc_test(
     name = "example_parsing_ops_test",
-    size = "large",
+    size = "medium",
     srcs = ["example_parsing_ops_test.cc"],
+    shard_count = 4,
+    tags = ["optonly"],
     deps = [
         ":example_parsing_ops",
         ":ops_testutil",
@@ -2028,8 +2085,8 @@ tf_kernel_library(
         ":variable_ops",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
         "//tensorflow/core:resource_variable_ops_op_lib",
-        "//third_party/eigen3",
     ],
 )
 
@@ -2094,6 +2151,10 @@ tf_kernel_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:functional_ops_op_lib",
         "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core/grappler:grappler_item",
+        "//tensorflow/core/grappler/clusters:virtual_cluster",
+        "//tensorflow/core/grappler/optimizers:meta_optimizer",
     ],
 )
 
@@ -4049,11 +4110,6 @@ cc_library(
 )
 
 SPARSE_DEPS = [
-    ":bounds_check",
-    ":cwise_op",
-    ":fill_functor",
-    ":scatter_functor",
-    "//third_party/eigen3",
     "//tensorflow/core:framework",
     "//tensorflow/core:lib",
     "//tensorflow/core:sparse_ops_op_lib",
@@ -4086,7 +4142,9 @@ tf_kernel_library(
 tf_kernel_library(
     name = "sparse_cross_op",
     prefix = "sparse_cross_op",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
@@ -4098,13 +4156,19 @@ tf_kernel_library(
 tf_kernel_library(
     name = "sparse_dense_binary_op_shared",
     prefix = "sparse_dense_binary_op_shared",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        ":cwise_op",
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
     name = "sparse_sparse_binary_op_shared",
     prefix = "sparse_sparse_binary_op_shared",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        ":cwise_op",
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
@@ -4136,7 +4200,9 @@ tf_kernel_library(
 tf_kernel_library(
     name = "sparse_softmax",
     prefix = "sparse_softmax",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
@@ -4148,25 +4214,37 @@ tf_kernel_library(
 tf_kernel_library(
     name = "sparse_tensor_dense_add_op",
     prefix = "sparse_tensor_dense_add_op",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        ":scatter_functor",
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
     name = "sparse_tensor_dense_matmul_op",
     prefix = "sparse_tensor_dense_matmul_op",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        ":bounds_check",
+        ":fill_functor",
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
     name = "sparse_to_dense_op",
     prefix = "sparse_to_dense_op",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
     name = "sparse_xent_op",
     prefix = "sparse_xent_op",
-    deps = SPARSE_DEPS,
+    deps = SPARSE_DEPS + [
+        ":bounds_check",
+        "//third_party/eigen3",
+    ],
 )
 
 tf_kernel_library(
@@ -4431,6 +4509,7 @@ cc_library(
         ":string_strip_op",
         ":string_to_hash_bucket_op",
         ":substr_op",
+        ":unicode_script_op",
     ],
 )
 
@@ -4438,7 +4517,12 @@ cc_library(
     name = "string_util",
     srcs = ["string_util.cc"],
     hdrs = ["string_util.h"],
-    deps = ["//tensorflow/core:lib"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "@icu//:common",
+    ],
 )
 
 STRING_DEPS = [
@@ -5254,6 +5338,8 @@ filegroup(
         "cwise_op_squared_difference.cc",
         "cwise_op_sub.cc",
         "cwise_op_tanh.cc",
+        "cwise_op_xlogy.cc",
+        "cwise_op_xdivy.cc",
         "data_format_ops.cc",
         "decode_wav_op.cc",
         "deep_conv2d.cc",
@@ -5469,6 +5555,7 @@ filegroup(
             "batch_kernels.*",
             "regex_full_match_op.cc",
             "regex_replace_op.cc",
+            "unicode_script_op.cc",
             # Ops that are inherently incompatible with Android (e.g. tied to x86 platform).
             "mkl_*",
             "xsmm_*",
@@ -6414,6 +6501,12 @@ tf_mkl_kernel_library(
 )
 
 tf_mkl_kernel_library(
+    name = "mkl_slice_op",
+    prefix = "mkl_slice_op",
+    deps = ARRAY_DEPS + mkl_deps(),
+)
+
+tf_mkl_kernel_library(
     name = "mkl_identity_op",
     prefix = "mkl_identity_op",
     deps = ARRAY_DEPS + mkl_deps(),
@@ -6554,6 +6647,16 @@ tf_kernel_library(
         "//tensorflow/core/util/rpc:rpc_factory",
         "//tensorflow/core/util/rpc:rpc_factory_registry",
         "//third_party/eigen3",
+    ],
+)
+
+tf_kernel_library(
+    name = "unicode_script_op",
+    srcs = ["unicode_script_op.cc"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:string_ops_op_lib",
+        "@icu//:common",
     ],
 )
 

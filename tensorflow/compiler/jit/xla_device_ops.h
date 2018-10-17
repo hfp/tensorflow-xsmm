@@ -65,11 +65,13 @@ class XlaAssignVariableOp : public AsyncOpKernel {
                               .HostMemory("resources"),   \
                           KERNEL);
 
-#define REGISTER_XLA_COMPILE_KERNEL(DEVICE, KERNEL, TYPES) \
-  REGISTER_KERNEL_BUILDER(Name("_XlaCompile")              \
-                              .Device(DEVICE)              \
-                              .HostMemory("constants")     \
-                              .HostMemory("resources"),    \
+#define REGISTER_XLA_COMPILE_KERNEL(DEVICE, KERNEL, TYPES)          \
+  REGISTER_KERNEL_BUILDER(Name("_XlaCompile")                       \
+                              .Device(DEVICE)                       \
+                              .HostMemory("constants")              \
+                              .HostMemory("key")                    \
+                              .HostMemory("compilation_successful") \
+                              .HostMemory("resources"),             \
                           KERNEL);
 
 #define REGISTER_XLA_RUN_KERNEL(DEVICE, KERNEL, TYPES) \
@@ -100,8 +102,14 @@ class XlaAssignVariableOp : public AsyncOpKernel {
       Name("VarHandleOp").Device(DEVICE).HostMemory("resource"),               \
       ResourceHandleOp<Var>);                                                  \
   REGISTER_KERNEL_BUILDER(                                                     \
+      Name("_VarHandlesOp").Device(DEVICE).HostMemory("resources"),            \
+      ResourceHandlesOp<Var>);                                                 \
+  REGISTER_KERNEL_BUILDER(                                                     \
       Name("ReadVariableOp").Device(DEVICE).HostMemory("resource"),            \
       ReadVariableOp);                                                         \
+  REGISTER_KERNEL_BUILDER(                                                     \
+      Name("_ReadVariablesOp").Device(DEVICE).HostMemory("resources"),         \
+      ReadVariablesOp);                                                        \
   REGISTER_KERNEL_BUILDER(                                                     \
       Name("DestroyResourceOp").Device(DEVICE).HostMemory("resource"),         \
       DestroyResourceOp);                                                      \
@@ -202,6 +210,8 @@ class XlaAssignVariableOp : public AsyncOpKernel {
                               .TypeConstraint<ResourceHandle>("T")             \
                               .HostMemory("input"),                            \
                           RetvalOp);                                           \
+  REGISTER_KERNEL_BUILDER(                                                     \
+      Name(kDeviceRetOp).Device(DEVICE).TypeConstraint<int32>("T"), RetvalOp); \
                                                                                \
   REGISTER_KERNEL_BUILDER(                                                     \
       Name("RemoteCall").Device(DEVICE).HostMemory("target"), RemoteCallOp);   \

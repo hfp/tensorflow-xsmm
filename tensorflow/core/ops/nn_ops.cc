@@ -178,7 +178,7 @@ REGISTER_OP("FusedBatchNorm")
     .Output("reserve_space_2: T")
     .Attr("T: {float}")
     .Attr("epsilon: float = 0.0001")
-    .Attr("data_format: string = 'NHWC'")
+    .Attr(GetConvnetDataFormatAttrString())
     .Attr("is_training: bool = true")
     .SetShapeFn(shape_inference::FusedBatchNormShape);
 
@@ -196,7 +196,7 @@ REGISTER_OP("FusedBatchNormV2")
     .Attr("T: {half, bfloat16, float}")
     .Attr("U: {float}")
     .Attr("epsilon: float = 0.0001")
-    .Attr("data_format: string = 'NHWC'")
+    .Attr(GetConvnetDataFormatAttrString())
     .Attr("is_training: bool = true")
     .SetShapeFn(shape_inference::FusedBatchNormShape);
 
@@ -213,7 +213,7 @@ REGISTER_OP("FusedBatchNormGrad")
     .Output("reserve_space_4: T")
     .Attr("T: {float}")
     .Attr("epsilon: float = 0.0001")
-    .Attr("data_format: string = 'NHWC'")
+    .Attr(GetConvnetDataFormatAttrString())
     .Attr("is_training: bool = true")
     .SetShapeFn(shape_inference::FusedBatchNormGradShape);
 
@@ -231,7 +231,7 @@ REGISTER_OP("FusedBatchNormGradV2")
     .Attr("T: {half, bfloat16, float}")
     .Attr("U: {float}")
     .Attr("epsilon: float = 0.0001")
-    .Attr("data_format: string = 'NHWC'")
+    .Attr(GetConvnetDataFormatAttrString())
     .Attr("is_training: bool = true")
     .SetShapeFn(shape_inference::FusedBatchNormGradShape);
 
@@ -981,6 +981,21 @@ REGISTER_OP("Relu6Grad")
     .Input("features: T")
     .Output("backprops: T")
     .Attr("T: realnumbertype")
+    .SetShapeFn(shape_inference::MergeBothInputsShapeFn);
+
+REGISTER_OP("LeakyRelu")
+    .Input("features: T")
+    .Output("activations: T")
+    .Attr("alpha: float = 0.2")
+    .Attr("T: {half, float, double} = DT_FLOAT")
+    .SetShapeFn(shape_inference::UnchangedShape);
+
+REGISTER_OP("LeakyReluGrad")
+    .Input("gradients: T")
+    .Input("features: T")
+    .Output("backprops: T")
+    .Attr("alpha: float = 0.2")
+    .Attr("T: {half, float, double} = DT_FLOAT")
     .SetShapeFn(shape_inference::MergeBothInputsShapeFn);
 
 REGISTER_OP("Elu")

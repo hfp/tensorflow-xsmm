@@ -46,6 +46,7 @@ from __future__ import print_function
 
 import abc
 import collections
+import contextlib
 import re
 import sys
 import time
@@ -94,21 +95,56 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import tf_logging as logging
 
 
+# TODO(b/114775106): temporary shim to optionally initialize the TPU
+# This increases the odds our session is initialized, but shouldn't be needed.
+def _maybe_initialize_tpu(session):
+  """Initialize the TPU if it has not already been initialized."""
+  try:
+
+    def test_op():
+      return constant_op.constant(1) + constant_op.constant(1)
+
+    session.run(tpu.rewrite(test_op))
+  except errors.FailedPreconditionError as _:
+    session.run(tpu.initialize_system())
+
+
+@contextlib.contextmanager
+def _tpu_session_context():
+  """Initialize the TPU and cleans cache entries for bad sessions."""
+  try:
+    _maybe_initialize_tpu(K.get_session())
+    yield
+  except (errors.FailedPreconditionError, errors.AbortedError) as e:
+    K.clear_session()
+    raise Exception("""
+An error occurred connecting or initializing your TPU.
+
+The session has been reset. re-run keras_to_tpu_model to create a new session.
+""" + e)
+
+
 def setup_tpu_session(cluster_resolver):
   """Construct or return a `tf.Session` connected to the given cluster."""
   master = cluster_resolver.master()
 
   # Use the existing session if we're already connected to this TPU
-  if (K.get_session()._target == master and
-      getattr(K.get_session(), '_tpu_initialized', None)):
-    return
+  # N.B K.get_session() is a non-trivial operation, and may fail if the remote
+  # session has been reset.
+  try:
+    default_session = K.get_session()
+    if (default_session._target == master and
+        getattr(default_session, '_tpu_initialized', None)):
+      return
+  except errors.AbortedError as _:
+    # We lost the remote session and need to re-initialize.
+    logging.warning('Lost remote session: creating a new session.')
 
   cluster_spec = cluster_resolver.cluster_spec()
   config = config_pb2.ConfigProto(isolate_session_state=True)
   if cluster_spec:
     config.cluster_def.CopyFrom(cluster_spec.as_cluster_def())
 
-  logging.info('Initialize')
   tpu_session = tf_session.Session(target=master, config=config)
   tpu_session.run(tpu.initialize_system())
   tpu_session._tpu_initialized = True
@@ -250,7 +286,8 @@ def _cross_replica_concat(tensor, core_id, num_cores, name):
                     '{}.'.format(input_dtype, name))
 
   batch_size = tensor.shape[0]
-  mask = math_ops.to_float(math_ops.equal(range(num_cores), core_id))
+  mask = math_ops.to_float(
+      math_ops.equal(np.arange(num_cores, dtype=np.int32), core_id))
   mask = array_ops.reshape(mask, [num_cores] + [1] * tensor.shape.ndims)
   result = mask * math_ops.to_float(tensor)
   local_tensor_with_holes = array_ops.reshape(result,
@@ -323,18 +360,6 @@ def _replicated_optimizer(opt):
     return tpu_optimizer.CrossShardOptimizer(opt.optimizer)
   else:
     return KerasCrossShardOptimizer(opt)
-
-
-def _clone_metrics(metrics):
-  """Returns a copy of metrics. A copy is created for stateful metrics."""
-  if metrics is None:
-    return None
-  with variable_scope.variable_scope(
-      'metrics', reuse=variable_scope.AUTO_REUSE):
-    return [
-        m.__class__.from_config(m.get_config()) if isinstance(
-            m, metrics_module.Metric) else m for m in metrics
-    ]
 
 
 def _clone_optimizer(optimizer, config=None):
@@ -817,7 +842,8 @@ def _inject_tpu_inputs_for_dataset(tpu_assignment, mode,
   return input_specs, get_next_ops
 
 
-def _inject_tpu_inputs_for_infeed(tpu_assignment, mode, input_tensors, inputs):
+def _inject_tpu_inputs_for_infeed(tpu_assignment, mode,
+                                  core_id_place_holder, input_tensors, inputs):
   """Append core information to the set of inputs."""
   # This is used during compilation to identify the current TPU core and enable
   # concatenation operations across cores.
@@ -825,8 +851,6 @@ def _inject_tpu_inputs_for_infeed(tpu_assignment, mode, input_tensors, inputs):
     return input_tensors, inputs
 
   # Puts a place holder in input spec.
-  core_id_place_holder = array_ops.placeholder(
-      dtype=dtypes.int32, shape=[1], name='core_id')
   input_tensors = [core_id_place_holder] + input_tensors
 
   # Now fill the core id. For `num_cores` = 2, `batch_size` = 8, we fill the
@@ -874,6 +898,10 @@ class TPUFunction(object):
     self._compilation_cache = {}
     self._cloned_model = None
     self._cloned_optimizer = None
+    # Create a placeholder for the TPU core ID. Cache the placeholder to avoid
+    # modifying the graph for every batch.
+    self._core_id_place_holder = array_ops.placeholder(
+        dtype=dtypes.int32, shape=[1], name='core_id')
 
   def _specialize_model(self, input_specs, infeed_manager):
     """Specialize `self.model` (a Keras model) for the given input shapes."""
@@ -960,14 +988,24 @@ class TPUFunction(object):
                   optimizer=_replicated_optimizer(self._cloned_optimizer),
                   loss=self.model.loss,
                   loss_weights=self.model.loss_weights,
-                  metrics=_clone_metrics(self.model.metrics),
-                  weighted_metrics=_clone_metrics(self.model.weighted_metrics),
+                  metrics=metrics_module.clone_metrics(self.model.metrics),
+                  weighted_metrics=metrics_module.clone_metrics(
+                      self.model.weighted_metrics),
                   target_tensors=tpu_targets,
               )
 
       # Compute our outfeed depending on the execution mode
       if is_training:
-        self._cloned_model._make_train_function()
+        if not isinstance(self._cloned_optimizer, keras_optimizers.TFOptimizer):
+          # For Keras optimizer, we try to place the variable weights on the TPU
+          # device. Keras creates optimizer variables (e.g. momentum values for
+          # the Momentum optimizer) when _make_train_function is invoked.
+          with keras_tpu_variables.replicated_variable_for_optimizer(
+              self._tpu_assignment.num_towers):
+            self._cloned_model._make_train_function()
+        else:
+          self._cloned_model._make_train_function()
+
         self._outfeed_spec = [
             tensor_spec.TensorSpec(tensor.shape, tensor.dtype, tensor.name)
             for tensor in self._cloned_model.train_function.outputs
@@ -1141,7 +1179,8 @@ class TPUFunction(object):
     inputs = inputs[:len(input_tensors)]
     input_tensors, inputs = (
         _inject_tpu_inputs_for_infeed(
-            self._tpu_assignment, self.execution_mode, input_tensors, inputs))
+            self._tpu_assignment, self.execution_mode,
+            self._core_id_place_holder, input_tensors, inputs))
     return input_tensors, inputs
 
   def _process_outputs(self, outfeed_outputs):
@@ -1360,13 +1399,9 @@ class KerasTPUModel(models.Model):
       raise ValueError('target_tensors is not supported for TPU execution.')
 
     self._cpu_model.compile(
-        _clone_optimizer(optimizer),
-        loss,
-        _clone_metrics(metrics),
-        loss_weights,
-        sample_weight_mode,
-        _clone_metrics(weighted_metrics),
-        target_tensors,
+        _clone_optimizer(optimizer), loss,
+        metrics_module.clone_metrics(metrics), loss_weights, sample_weight_mode,
+        metrics_module.clone_metrics(weighted_metrics), target_tensors,
         **kwargs)
 
     super(KerasTPUModel, self).compile(optimizer, loss, metrics, loss_weights,
@@ -1393,97 +1428,76 @@ class KerasTPUModel(models.Model):
       raise EnvironmentError('KerasTPUModel currently does not support eager '
                              'mode.')
 
-    assert not self._numpy_to_infeed_manager_list  # Ensure empty.
+    with _tpu_session_context():
+      assert not self._numpy_to_infeed_manager_list  # Ensure empty.
 
-    infeed_managers = []  # Managers to clean up at the end of the fit call.
-    if isinstance(x, dataset_ops.Dataset):
-      # TODO(b/111413240): Support taking a tf.data.Dataset directly.
-      raise ValueError(
-          'Taking a Dataset directly is not yet supported. Please '
-          'wrap your dataset construction code in a function and '
-          'pass that to fit instead. For examples, see: '
-          'https://github.com/tensorflow/tpu/tree/master/models/experimental'
-          '/keras')
-    if callable(x):
-      with ops.device('/job:%s/device:CPU:0' %
-                      self._tpu_assignment.worker_name):
-        dataset = x()
-        if steps_per_epoch is None:
-          raise ValueError('When using tf.data as input to a model, you '
-                           'should specify the steps_per_epoch argument.')
-        if y is not None:
-          raise ValueError('When using tf.data as input to a model, y must be '
-                           'None')
-        infeed_manager = TPUDatasetInfeedManager(
-            dataset, self._tpu_assignment, model_fn_lib.ModeKeys.TRAIN)
+      infeed_managers = []  # Managers to clean up at the end of the fit call.
+      if isinstance(x, dataset_ops.Dataset):
+        # TODO(b/111413240): Support taking a tf.data.Dataset directly.
+        raise ValueError(
+            'Taking a Dataset directly is not yet supported. Please '
+            'wrap your dataset construction code in a function and '
+            'pass that to fit instead. For examples, see: '
+            'https://github.com/tensorflow/tpu/tree/master/models/experimental'
+            '/keras')
+      if callable(x):
+        with ops.device(
+            '/job:%s/device:CPU:0' % self._tpu_assignment.worker_name):
+          dataset = x()
+          if steps_per_epoch is None:
+            raise ValueError('When using tf.data as input to a model, you '
+                             'should specify the steps_per_epoch argument.')
+          if y is not None:
+            raise ValueError('When using tf.data as input to a model, y must '
+                             'be None')
+          infeed_manager = TPUDatasetInfeedManager(
+              dataset, self._tpu_assignment, model_fn_lib.ModeKeys.TRAIN)
+          # Use dummy numpy inputs for the rest of Keras' shape checking. We
+          # intercept them when building the model.
+          x = infeed_manager.dummy_x
+          y = infeed_manager.dummy_y
+          infeed_managers.append((x, infeed_manager))
+
+      if isinstance(validation_data, dataset_ops.Dataset):
+        # TODO(b/111413240): Support taking a tf.data.Dataset directly.
+        raise ValueError(
+            'Taking a Dataset directly is not yet supported. Please '
+            'wrap your dataset construction code in a function and '
+            'pass that to fit instead. For examples, see: '
+            'https://github.com/tensorflow/tpu/tree/master/models/experimental'
+            '/keras')
+      if callable(validation_data):
+        dataset = validation_data()
+        if validation_steps is None:
+          raise ValueError('When using tf.data as validation for a model, you '
+                           'should specify the validation_steps argument.')
+        infeed_manager = TPUDatasetInfeedManager(dataset, self._tpu_assignment,
+                                                 model_fn_lib.ModeKeys.EVAL)
         # Use dummy numpy inputs for the rest of Keras' shape checking. We
         # intercept them when building the model.
-        x = infeed_manager.dummy_x
-        y = infeed_manager.dummy_y
-        infeed_managers.append((x, infeed_manager))
+        val_x = infeed_manager.dummy_x
+        val_y = infeed_manager.dummy_y
+        infeed_managers.append((val_x, infeed_manager))
+        validation_data = (val_x, val_y)
 
-    if isinstance(validation_data, dataset_ops.Dataset):
-      # TODO(b/111413240): Support taking a tf.data.Dataset directly.
-      raise ValueError(
-          'Taking a Dataset directly is not yet supported. Please '
-          'wrap your dataset construction code in a function and '
-          'pass that to fit instead. For examples, see: '
-          'https://github.com/tensorflow/tpu/tree/master/models/experimental'
-          '/keras')
-    if callable(validation_data):
-      dataset = validation_data()
-      if validation_steps is None:
-        raise ValueError('When using tf.data as validation for a model, you '
-                         'should specify the validation_steps argument.')
-      infeed_manager = TPUDatasetInfeedManager(
-          dataset, self._tpu_assignment, model_fn_lib.ModeKeys.EVAL)
-      # Use dummy numpy inputs for the rest of Keras' shape checking. We
-      # intercept them when building the model.
-      val_x = infeed_manager.dummy_x
-      val_y = infeed_manager.dummy_y
-      infeed_managers.append((val_x, infeed_manager))
-      validation_data = (val_x, val_y)
-
-    self._numpy_to_infeed_manager_list = infeed_managers
-    try:
-      if not kwargs.get('_pipeline', True):
-        logging.info('Running non-pipelined training loop (`_pipeline=%s`).',
-                     kwargs['_pipeline'])
-        kwargs.pop('_pipeline')
-        return super(KerasTPUModel, self).fit(
-            x,
-            y,
-            batch_size,
-            epochs,
-            verbose,
-            callbacks,
-            validation_split,
-            validation_data,
-            shuffle,
-            class_weight,
-            sample_weight,
-            initial_epoch,
-            steps_per_epoch,
-            validation_steps,
-            **kwargs)
-      return self._pipeline_fit(
-          x,
-          y,
-          batch_size,
-          epochs,
-          verbose,
-          callbacks,
-          validation_split,
-          validation_data,
-          shuffle,
-          class_weight,
-          sample_weight,
-          initial_epoch,
-          steps_per_epoch,
-          validation_steps,
-          **kwargs)
-    finally:
-      self._numpy_to_infeed_manager_list = []
+      self._numpy_to_infeed_manager_list = infeed_managers
+      try:
+        pipeline = kwargs.get('_pipeline', True)
+        if '_pipeline' in kwargs:
+          kwargs.pop('_pipeline')
+        if not pipeline:
+          logging.info('Running non-pipelined training loop (`_pipeline=%s`).',
+                       pipeline)
+          return super(KerasTPUModel, self).fit(
+              x, y, batch_size, epochs, verbose, callbacks, validation_split,
+              validation_data, shuffle, class_weight, sample_weight,
+              initial_epoch, steps_per_epoch, validation_steps, **kwargs)
+        return self._pipeline_fit(x, y, batch_size, epochs, verbose, callbacks,
+                                  validation_split, validation_data, shuffle,
+                                  class_weight, sample_weight, initial_epoch,
+                                  steps_per_epoch, validation_steps, **kwargs)
+      finally:
+        self._numpy_to_infeed_manager_list = []
 
   def evaluate(self,
                x=None,
@@ -1494,37 +1508,38 @@ class KerasTPUModel(models.Model):
                steps=None):
     assert not self._numpy_to_infeed_manager_list  # Ensure empty.
 
-    infeed_managers = []  # Managers to clean up at the end of the fit call.
-    if isinstance(x, dataset_ops.Dataset):
-      # TODO(b/111413240): Support taking a tf.data.Dataset directly.
-      raise ValueError(
-          'Taking a Dataset directly is not yet supported. Please '
-          'wrap your dataset construction code in a function and '
-          'pass that to fit instead. For examples, see: '
-          'https://github.com/tensorflow/tpu/tree/master/models/experimental'
-          '/keras')
-    if callable(x):
-      dataset = x()
-      if steps is None:
-        raise ValueError('When using tf.data as input to a model, you '
-                         'should specify the steps argument.')
-      if y is not None:
-        raise ValueError('When using tf.data as input to a model, y must be '
-                         'None')
-      infeed_manager = TPUDatasetInfeedManager(
-          dataset, self._tpu_assignment, model_fn_lib.ModeKeys.EVAL)
-      # Use dummy numpy inputs for the rest of Keras' shape checking. We
-      # intercept them when building the model.
-      x = infeed_manager.dummy_x
-      y = infeed_manager.dummy_y
-      infeed_managers.append((x, infeed_manager))
+    with _tpu_session_context():
+      infeed_managers = []  # Managers to clean up at the end of the fit call.
+      if isinstance(x, dataset_ops.Dataset):
+        # TODO(b/111413240): Support taking a tf.data.Dataset directly.
+        raise ValueError(
+            'Taking a Dataset directly is not yet supported. Please '
+            'wrap your dataset construction code in a function and '
+            'pass that to fit instead. For examples, see: '
+            'https://github.com/tensorflow/tpu/tree/master/models/experimental'
+            '/keras')
+      if callable(x):
+        dataset = x()
+        if steps is None:
+          raise ValueError('When using tf.data as input to a model, you '
+                           'should specify the steps argument.')
+        if y is not None:
+          raise ValueError('When using tf.data as input to a model, y must be '
+                           'None')
+        infeed_manager = TPUDatasetInfeedManager(dataset, self._tpu_assignment,
+                                                 model_fn_lib.ModeKeys.EVAL)
+        # Use dummy numpy inputs for the rest of Keras' shape checking. We
+        # intercept them when building the model.
+        x = infeed_manager.dummy_x
+        y = infeed_manager.dummy_y
+        infeed_managers.append((x, infeed_manager))
 
-    self._numpy_to_infeed_manager_list = infeed_managers
-    try:
-      return super(KerasTPUModel, self).evaluate(x, y, batch_size, verbose,
-                                                 sample_weight, steps)
-    finally:
-      self._numpy_to_infeed_manager_list = []
+      self._numpy_to_infeed_manager_list = infeed_managers
+      try:
+        return super(KerasTPUModel, self).evaluate(x, y, batch_size, verbose,
+                                                   sample_weight, steps)
+      finally:
+        self._numpy_to_infeed_manager_list = []
 
   def _pipeline_fit(self, x, y, batch_size, epochs, verbose, callbacks,
                     validation_split, validation_data, shuffle, class_weight,
@@ -1912,6 +1927,24 @@ class KerasTPUModel(models.Model):
 
     return val_x, val_y, val_sample_weights
 
+  def predict(self,
+              x,
+              batch_size=None,
+              verbose=0,
+              steps=None,
+              max_queue_size=10,
+              workers=1,
+              use_multiprocessing=False):
+    with _tpu_session_context():
+      return super(KerasTPUModel, self).predict(
+          x,
+          batch_size=batch_size,
+          verbose=verbose,
+          steps=steps,
+          max_queue_size=max_queue_size,
+          workers=workers,
+          use_multiprocessing=use_multiprocessing)
+
   @property
   def optimizer(self):
     if self._tpu_model:
@@ -1968,6 +2001,9 @@ class KerasTPUModel(models.Model):
 
     logging.info('Setting weights on TPU model.')
     cloned_model.set_weights(weights)
+    if self._tpu_model.optimizer is None:
+      # tpu_model may not be compiled, e.g., loading weights and then predict.
+      return
     for k, v in six.iteritems(cpu_optimizer_config):
       opt_var = getattr(self._tpu_model.optimizer, k)
       if isinstance(opt_var, variables.Variable):
@@ -2020,6 +2056,10 @@ class KerasTPUModel(models.Model):
     # Instead, reset CPU model weights and force TPU re-initialization at the
     # next call.
     self._cpu_model.set_weights(weights)
+    self._tpu_weights_initialized = False
+
+  def load_weights(self, filepath, by_name=False):
+    self._cpu_model.load_weights(filepath, by_name)
     self._tpu_weights_initialized = False
 
 
@@ -2122,10 +2162,10 @@ def tpu_model(model, strategy=None):
     cpu_model.compile(
         _clone_optimizer(model.optimizer, optimizer_config),
         model.loss,
-        _clone_metrics(model.metrics),
+        metrics_module.clone_metrics(model.metrics),
         model.loss_weights,
         model.sample_weight_mode,
-        _clone_metrics(model.weighted_metrics),
+        metrics_module.clone_metrics(model.weighted_metrics),
     )
 
   if model_weights:
