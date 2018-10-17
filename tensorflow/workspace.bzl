@@ -110,11 +110,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "mkl_dnn",
         build_file = clean_dep("//third_party/mkl_dnn:mkldnn.BUILD"),
-        sha256 = "363cc9239eacf8e7917753c6d8c94f767e4cd049160d0654a61ef32d5e1b3049",
-        strip_prefix = "mkl-dnn-4e333787e0d66a1dca1218e99a891d493dbc8ef1",
+        sha256 = "cc23a13b50a2de067328d8a4961c88990815053ede7c85a2520d229691e4685b",
+        strip_prefix = "mkl-dnn-51737f32ce3ef7059fcccb257896489999f1a398",
         urls = [
-            "https://mirror.bazel.build/github.com/intel/mkl-dnn/archive/4e333787e0d66a1dca1218e99a891d493dbc8ef1.tar.gz",
-            "https://github.com/intel/mkl-dnn/archive/4e333787e0d66a1dca1218e99a891d493dbc8ef1.tar.gz",
+            "https://github.com/intel/mkl-dnn/archive/51737f32ce3ef7059fcccb257896489999f1a398.zip",
         ],
     )
 
@@ -132,10 +131,11 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
-        sha256 = "07069834d35aebd2d3e9744f4692b29b9aa678fa2b19237c518ee058311ab059",
-        strip_prefix = "eigen-79f7aec2506d7bc2500b4e7359d3e48e5604bda4",
+        sha256 = "d956415d784fa4e42b6a2a45c32556d6aec9d0a3d8ef48baee2522ab762556a9",
+        strip_prefix = "eigen-eigen-fd6845384b86",
         urls = [
-            "https://github.com/hfp/eigen/archive/79f7aec2506d7bc2500b4e7359d3e48e5604bda4.zip",
+            "https://mirror.bazel.build/bitbucket.org/eigen/eigen/get/fd6845384b86.tar.gz",
+            "https://bitbucket.org/eigen/eigen/get/fd6845384b86.tar.gz",
         ],
     )
 
