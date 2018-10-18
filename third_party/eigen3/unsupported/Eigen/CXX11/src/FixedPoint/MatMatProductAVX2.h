@@ -43,7 +43,7 @@ class gebp_traits<QInt16, QInt16, _ConjLhs, _ConjRhs> {
 // Used by TensorContractionThreadPool, inputs must have dimensions that are
 // multiples of 32.
 template <typename Index, int ShardingType>
-class TensorContractionBlocking<QInt32, QInt16, QInt16, Index, ShardingType> {
+class TensorContractionBlocking<QInt16, QInt16, Index, ShardingType> {
  public:
   TensorContractionBlocking(Index k, Index m, Index n, Index num_threads = 1)
       : kc_(((k + 15) / 16) * 16),
@@ -144,7 +144,7 @@ class gemm_blocking_space<ColMajor, QInt16, QInt16, MaxRows, MaxCols, MaxDepth,
 
 template <typename Index, typename DataMapper, int Pack1, int Pack2,
           bool Conjugate, bool PanelMode>
-struct gemm_pack_lhs<QInt16, Index, DataMapper, Pack1, Pack2, /*ColMajor,*/
+struct gemm_pack_lhs<QInt16, Index, DataMapper, Pack1, Pack2, ColMajor,
                      Conjugate, PanelMode> {
   EIGEN_DONT_INLINE void operator()(QInt16* blockA, const DataMapper& lhs,
                                     Index depth, Index rows, Index stride = 0,
