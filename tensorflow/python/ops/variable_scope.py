@@ -31,6 +31,7 @@ import six
 from six import iteritems
 from six.moves import xrange  # pylint: disable=redefined-builtin
 
+from tensorflow.python import tf2
 from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -206,7 +207,7 @@ it does exist, simply return it.
 """
 
 
-_DEFAULT_USE_RESOURCE = False
+_DEFAULT_USE_RESOURCE = tf2.enabled()
 
 
 @tf_export(v1=["enable_resource_variables"])
@@ -711,7 +712,7 @@ class _VariableStore(object):
 
     vs = []
     num_slices = partitions[slice_dim]
-    num_slices_with_excess = shape[slice_dim].value % num_slices
+    num_slices_with_excess = shape.dims[slice_dim].value % num_slices
 
     slice_offset = [0] * shape.ndims
 

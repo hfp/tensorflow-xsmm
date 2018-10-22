@@ -108,6 +108,7 @@ def tflite_jni_binary(
         linkscript = LINKER_SCRIPT,
         linkshared = 1,
         linkstatic = 1,
+        testonly = 0,
         deps = []):
     """Builds a jni binary for TFLite."""
     linkopts = linkopts + [
@@ -121,6 +122,7 @@ def tflite_jni_binary(
         linkstatic = linkstatic,
         deps = deps + [linkscript],
         linkopts = linkopts,
+        testonly = testonly,
     )
 
 def tflite_cc_shared_object(
@@ -233,6 +235,7 @@ def generated_test_models():
         "expand_dims",
         "floor",
         "floor_div",
+        "floor_mod",
         "fully_connected",
         "fused_batch_norm",
         "gather",
@@ -302,11 +305,6 @@ def generated_test_models():
 # If you have to disable a test, please add here with a link to the appropriate
 # bug or issue.
 def generated_test_models_failing(conversion_mode):
-    if not conversion_mode:
-        return [
-            "transpose_conv",  # disabled due to b/111213074
-        ]
-
     if conversion_mode == "toco-flex":
         # TODO(b/117328698): Fix and enable the known flex failures.
         return [

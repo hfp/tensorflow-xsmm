@@ -83,6 +83,7 @@ py_library(
         "//tensorflow/python:errors",
         "//tensorflow/python:platform",
         "//tensorflow/python:pywrap_tensorflow",
+        "//tensorflow/python:tf2",
         "//tensorflow/python:util",
     ],
 )
@@ -161,6 +162,7 @@ cuda_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:resource_variable_ops",
     ],
+    shard_count = 10,
 )
 
 py_library(
@@ -252,10 +254,10 @@ py_library(
         "//tensorflow/python:dtypes",
         "//tensorflow/python:errors",
         "//tensorflow/python:framework_ops",
+        "//tensorflow/python:func_graph",
         "//tensorflow/python:gradients_impl",
         "//tensorflow/python:graph_to_function_def",
         "//tensorflow/python:util",
-        "//tensorflow/python/autograph",
         "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:core",
         "//tensorflow/python/eager:execute",
@@ -277,6 +279,7 @@ py_library(
         "//tensorflow/python:dtypes",
         "//tensorflow/python:errors",
         "//tensorflow/python:framework_ops",
+        "//tensorflow/python:gradients_impl",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:pywrap_tensorflow",
         "//tensorflow/python:tensor_shape",
@@ -371,6 +374,11 @@ py_library(
     name = "imperative_grad",
     srcs = ["imperative_grad.py"],
     srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow/python:gradients_impl",
+        "//tensorflow/python:pywrap_tensorflow",
+        "//tensorflow/python:util",
+    ],
 )
 
 cuda_py_test(

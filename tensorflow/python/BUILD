@@ -864,6 +864,42 @@ py_library(
 )
 
 py_library(
+    name = "func_graph",
+    srcs = ["framework/func_graph.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":auto_control_deps",
+        ":framework_ops",
+        "//tensorflow/python/autograph",
+        "//tensorflow/python/eager:context",
+        "//tensorflow/python/eager:graph_only_ops",
+        "//tensorflow/python/eager:tape",
+    ],
+)
+
+py_library(
+    name = "auto_control_deps",
+    srcs = ["framework/auto_control_deps.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":control_flow_ops",
+        ":framework_ops",
+        ":util",
+    ],
+)
+
+py_test(
+    name = "auto_control_deps_test",
+    size = "small",
+    srcs = ["framework/auto_control_deps_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":auto_control_deps",
+        ":client_testlib",
+    ],
+)
+
+py_library(
     name = "random_seed",
     srcs = ["framework/random_seed.py"],
     srcs_version = "PY2AND3",
@@ -2008,6 +2044,7 @@ py_library(
         ":resource_variable_ops_gen",
         ":sparse_tensor",
         ":tensor_array_ops",
+        ":tf2",
         ":tf_should_use",
         ":util",
         "//tensorflow/core:protos_all_py",
@@ -3024,6 +3061,7 @@ py_library(
         ":platform",
         ":resource_variable_ops",
         ":tensor_shape",
+        ":tf2",
         ":util",
         ":variables",
         "//tensorflow/python/eager:context",
@@ -5709,4 +5747,10 @@ pyx_library(
     srcs = ["framework/fast_tensor_util.pyx"],
     py_deps = ["//tensorflow/python:util"],
     deps = ["//third_party/py/numpy:headers"],
+)
+
+py_library(
+    name = "tf2",
+    srcs = ["tf2.py"],
+    srcs_version = "PY2AND3",
 )

@@ -12,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""baseline python module.
+"""Tools to help with the TensorFlow 2.0 transition.
 
-Importing from tensorflow.python.estimator is unsupported
-and will soon break!
+This module is meant for TensorFlow internal implementation, not for users of
+the TensorFlow library. For that see tf.compat instead.
 """
-# pylint: disable=unused-import,g-bad-import-order,g-import-not-at-top,wildcard-import
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow_estimator.contrib.estimator.python.estimator import baseline
+import os
 
-# Include attrs that start with single underscore.
-_HAS_DYNAMIC_ATTRIBUTES = True
-baseline.__all__ = [s for s in dir(baseline) if not s.startswith('__')]
 
-from tensorflow_estimator.contrib.estimator.python.estimator.baseline import *
+def enabled():
+  """Returns True iff TensorFlow 2.0 behavior should be enabled."""
+  return os.getenv("TF2_BEHAVIOR") is not None

@@ -55,6 +55,7 @@ class PartitionedCallOp : public AsyncOpKernel {
         ctx, rewriter_config_.ParseFromString(rewriter_config_serialized),
         errors::InvalidArgument("Unable to parse rewriter_config string as "
                                 "tensorflow::RewriterConfig proto."));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("executor_type", &executor_type_));
   }
 
   ~PartitionedCallOp() override {}
@@ -213,6 +214,7 @@ class PartitionedCallOp : public AsyncOpKernel {
               ctx, GraphToFunctionDef(*subgraph, unique_name, &shard), done);
           OP_REQUIRES_OK_ASYNC(ctx, overlay_lib->AddFunctionDef(shard), done);
           FunctionLibraryRuntime::InstantiateOptions opts;
+          opts.executor_type = executor_type_;
           opts.target = target;
           opts.overlay_lib = overlay_lib;
           FHandle handle;
@@ -530,6 +532,18 @@ class PartitionedCallOp : public AsyncOpKernel {
     TF_RETURN_IF_ERROR(ConvertGraphDefToGraph(
         GraphConstructorOptions(), out_graph, optimized_graph.get()));
 
+    // Copy optimized functions back to the overlay lib.
+    if (flib) {
+      for (const FunctionDef& fdef : out_graph.library().function()) {
+        const string& func_name = fdef.signature().name();
+        if (flib->Contains(func_name)) {
+          TF_RETURN_IF_ERROR(flib->ReplaceFunction(func_name, fdef));
+        } else {
+          TF_RETURN_IF_ERROR(flib->AddFunctionDef(fdef));
+        }
+      }
+    }
+
     *graph = std::move(optimized_graph);
 
     // The graph conversion sets the requested device names but not the
@@ -545,6 +559,7 @@ class PartitionedCallOp : public AsyncOpKernel {
 
   NameAttrList func_;
   RewriterConfig rewriter_config_;
+  string executor_type_;
   // Contains maps from device names to handles of function partitions, keyed by
   // FunctionLibraryRuntime pointers. (Because this kernel may be instantiated
   // for a stateful op, different invocations of it may use different
