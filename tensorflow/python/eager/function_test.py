@@ -2312,6 +2312,30 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
         # pylint: disable=protected-access
         self.assertEqual(len(graph._functions), 3)
 
+  def testBackwardNone(self):
+    with ops.Graph().as_default():
+      model = variables.Variable(1.0, name='model')
+      count = variables.Variable(0)
+
+      @function.defun
+      def forward_pass(value):
+        count.assign_add(1)
+        residuals = value - model
+        loss = 0.5 * math_ops.reduce_mean(math_ops.pow(residuals, 2))
+        # Note: count is an integer, so its doutput will be None
+        return loss, count
+
+      def reduce_fn(x):
+        loss, count = forward_pass(x)
+        grad_only = gradients_impl.gradients(loss, model)
+        return grad_only, count
+
+      do_it = reduce_fn(constant_op.constant([7.0]))
+
+      with self.test_session() as sess:
+        sess.run([variables.global_variables_initializer()])
+        self.assertAllEqual(sess.run(do_it), [[-6.0], 1])
+
   def testCallingFunctionWithDifferentVariables(self):
 
     @function.defun
@@ -2833,6 +2857,62 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
         [b'x', b'y', b'args', b'args'],
         [inp.op.get_attr('_user_specified_name')
          for inp in variadic_op.inputs])
+
+
+class DefunCollectionTest(test.TestCase):
+
+  def testCollectionValueAccess(self):
+    """Read values from graph collections inside of defun."""
+    with ops.Graph().as_default() as g:
+      with self.session(graph=g):
+        x = 2
+        y = 5
+        ops.add_to_collection('x', x)
+        ops.add_to_collection('y', y)
+
+        @function.defun
+        def fn():
+          x_const = constant_op.constant(ops.get_collection('x')[0])
+          y_const = constant_op.constant(ops.get_collection('y')[0])
+          z = math_ops.add(x_const, y_const)
+          ops.add_to_collection('z', 7)
+          return z
+
+        self.assertEqual(7, int(self.evaluate(fn())))
+        self.assertEquals(ops.get_collection('x'), [2])
+        self.assertEquals(ops.get_collection('y'), [5])
+        self.assertEquals(ops.get_collection('z'), [])
+
+  def testCollectionVariableValueAccess(self):
+    """Read variable value from graph collections inside of defun."""
+    with ops.Graph().as_default() as g:
+      with self.session(graph=g):
+        v = resource_variable_ops.ResourceVariable(1.0)
+
+        @function.defun
+        def f():
+          return v.read_value()
+
+        self.evaluate(variables.global_variables_initializer())
+        self.assertEqual(1.0, float(self.evaluate(f())))
+        self.assertEquals(
+            len(ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)), 1)
+
+  def testCollectionVariableValueWrite(self):
+    """Write variable value inside defun."""
+    with ops.Graph().as_default() as g:
+      with self.session(graph=g):
+
+        @function.defun
+        def f():
+          v = resource_variable_ops.ResourceVariable(2.0)
+          return v
+
+        _ = f.get_concrete_function()
+        self.evaluate(variables.global_variables_initializer())
+        self.assertEqual(2.0, float(self.evaluate(f())))
+        self.assertEquals(
+            len(ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)), 1)
 
 
 if __name__ == '__main__':
