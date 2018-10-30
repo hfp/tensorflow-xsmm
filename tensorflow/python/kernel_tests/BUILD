@@ -1142,6 +1142,18 @@ cuda_py_test(
 )
 
 tf_py_test(
+    name = "unicode_transcode_op_test",
+    size = "small",
+    srcs = ["unicode_transcode_op_test.py"],
+    additional_deps = [
+        "@absl_py//absl/testing:parameterized",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:string_ops",
+    ],
+)
+
+tf_py_test(
     name = "unique_op_test",
     size = "small",
     srcs = ["unique_op_test.py"],
@@ -3316,8 +3328,11 @@ cuda_py_test(
         "//tensorflow/python:dtypes",
         "//tensorflow/python:framework",
         "//tensorflow/python:framework_ops",
+        "//tensorflow/python:functional_ops",
         "//tensorflow/python:gradients_impl",
         "//tensorflow/python:list_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:tensor_array_grad",
         "//tensorflow/python:tf_optimizer",
         "//tensorflow/python:while_v2",
     ],

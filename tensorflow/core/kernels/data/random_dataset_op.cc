@@ -12,10 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
-#include "tensorflow/core/kernels/data/dataset.h"
 #include "tensorflow/core/lib/random/philox_random.h"
 #include "tensorflow/core/lib/random/random.h"
 #include "tensorflow/core/lib/random/random_distributions.h"
@@ -100,9 +100,9 @@ class RandomDatasetOp : public DatasetOpKernel {
                              std::vector<Tensor>* out_tensors,
                              bool* end_of_sequence) override {
         mutex_lock l(mu_);
-        Tensor value_tensor(ctx->allocator({}), DT_INT64, {});
-        value_tensor.scalar<int64>()() = Random();
-        out_tensors->emplace_back(std::move(value_tensor));
+        out_tensors->emplace_back(ctx->allocator({}), DT_INT64,
+                                  TensorShape({}));
+        out_tensors->back().scalar<int64>()() = Random();
         *end_of_sequence = false;
         return Status::OK();
       }

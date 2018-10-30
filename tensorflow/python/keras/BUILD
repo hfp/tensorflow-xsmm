@@ -356,7 +356,10 @@ cuda_py_test(
         "//tensorflow/python:client_testlib",
     ],
     shard_count = 2,
-    tags = ["no_windows_gpu"],
+    tags = [
+        "no_oss",  # b/117834718
+        "no_windows_gpu",
+    ],
 )
 
 py_test(
@@ -768,6 +771,18 @@ py_test(
     tags = [
         "no-internal-py3",
     ],
+    deps = [
+        ":keras",
+        "//tensorflow/python:client_testlib",
+        "//third_party/py/numpy",
+    ],
+)
+
+py_test(
+    name = "base_layer_test",
+    size = "small",
+    srcs = ["engine/base_layer_test.py"],
+    srcs_version = "PY2AND3",
     deps = [
         ":keras",
         "//tensorflow/python:client_testlib",

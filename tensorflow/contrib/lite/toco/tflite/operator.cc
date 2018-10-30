@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/contrib/lite/toco/tflite/custom_operator.h"
 #include "tensorflow/contrib/lite/toco/tflite/simple_operator.h"
 #include "tensorflow/contrib/lite/toco/tflite/types.h"
+#include "tensorflow/contrib/lite/toco/tflite/whitelisted_flex_ops.h"
 #include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/framework/op.h"
@@ -913,6 +914,27 @@ class ResizeBilinear
   int GetVersion(const Operator& op) const override { return 1; }
 };
 
+class ResizeNearestNeighbor
+    : public BuiltinOperator<
+          ResizeNearestNeighborOperator, ::tflite::ResizeNearestNeighborOptions,
+          ::tflite::BuiltinOptions_ResizeNearestNeighborOptions> {
+ public:
+  using BuiltinOperator::BuiltinOperator;
+  flatbuffers::Offset<TfLiteOptions> WriteOptions(
+      const TocoOperator& op,
+      flatbuffers::FlatBufferBuilder* builder) const override {
+    return ::tflite::CreateResizeNearestNeighborOptions(*builder,
+                                                        op.align_corners);
+  }
+
+  void ReadOptions(const TfLiteOptions& options,
+                   TocoOperator* op) const override {
+    op->align_corners = options.align_corners();
+  }
+
+  int GetVersion(const Operator& op) const override { return 1; }
+};
+
 class Squeeze
     : public BuiltinOperator<SqueezeOperator, ::tflite::SqueezeOptions,
                              ::tflite::BuiltinOptions_SqueezeOptions> {
@@ -1454,6 +1476,9 @@ std::vector<std::unique_ptr<BaseOperator>> BuildOperatorList(
   ops.push_back(
       MakeUnique<ResizeBilinear>(::tflite::BuiltinOperator_RESIZE_BILINEAR,
                                  OperatorType::kResizeBilinear));
+  ops.push_back(MakeUnique<ResizeNearestNeighbor>(
+      ::tflite::BuiltinOperator_RESIZE_NEAREST_NEIGHBOR,
+      OperatorType::kResizeNearestNeighbor));
   ops.push_back(MakeUnique<Squeeze>(::tflite::BuiltinOperator_SQUEEZE,
                                     OperatorType::kSqueeze));
   ops.push_back(
@@ -1559,6 +1584,8 @@ std::vector<std::unique_ptr<BaseOperator>> BuildOperatorList(
       "FLOOR_DIV", OperatorType::kFloorDiv));
   ops.emplace_back(new SimpleOperator<FloorModOperator>(
       "FLOOR_MOD", OperatorType::kFloorMod));
+  ops.emplace_back(
+      new SimpleOperator<RangeOperator>("RANGE", OperatorType::kRange));
   // Element-wise operator
   ops.push_back(
       MakeUnique<SimpleOperator<SinOperator>>("SIN", OperatorType::kSin));
@@ -1610,12 +1637,23 @@ bool ShouldExportAsFlexOp(bool allow_flex_ops,
     return false;
   }
   // Check if we can find the `OpDef` for the TensorFlow op. If we can find
-  // it, export the op as an Flex op. Otherwise, export it as a regular custom
-  // op.
+  // it and it has been whitelisted, export the op as an Flex op. Otherwise,
+  // export it as a regular custom op.
   const tensorflow::OpDef* op_def = nullptr;
-  return tensorflow::OpRegistry::Global()
-      ->LookUpOpDef(tensorflow_op_name, &op_def)
-      .ok();
+  if (!tensorflow::OpRegistry::Global()
+           ->LookUpOpDef(tensorflow_op_name, &op_def)
+           .ok()) {
+    return false;
+  }
+
+  if (!IsWhitelistedFlexOp(tensorflow_op_name)) {
+    LOG(WARNING) << "Op " << tensorflow_op_name
+                 << " is a valid TensorFlow op but has not been whitelisted for"
+                    " the TensorFlow Lite flex op set.";
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace tflite

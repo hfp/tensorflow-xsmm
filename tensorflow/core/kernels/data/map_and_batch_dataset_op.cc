@@ -18,10 +18,10 @@ limitations under the License.
 #include <utility>
 
 #include "tensorflow/core/common_runtime/function.h"
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/kernels/data/captured_function.h"
-#include "tensorflow/core/kernels/data/dataset.h"
 #include "tensorflow/core/kernels/data/dataset_utils.h"
 #include "tensorflow/core/kernels/inplace_ops_functor.h"
 #include "tensorflow/core/lib/core/blocking_counter.h"
@@ -129,7 +129,10 @@ class MapAndBatchDatasetOp : public UnaryDatasetOpKernel {
             out_tensors->push_back(captured_inputs[indices[i] - num_args]);
           }
         }
-        done(Status::OK());
+        // Run the `done` callback on a threadpool thread, because it will
+        // potentially do a lot of copying work, and we want to run that
+        // concurrently with the next invocation.
+        (*ctx->runner())(std::bind(std::move(done), Status::OK()));
       };
     }
 
@@ -480,9 +483,9 @@ class MapAndBatchDatasetOp : public UnaryDatasetOpKernel {
           component_shape.AppendShape(return_values->at(i).shape());
           AllocatorAttributes attr;
           attr.set_gpu_compatible(true);
-          Tensor component(ctx->allocator(attr), return_values->at(i).dtype(),
-                           component_shape);
-          result->output.emplace_back(std::move(component));
+          result->output.emplace_back(ctx->allocator(attr),
+                                      return_values->at(i).dtype(),
+                                      component_shape);
         }
         result->output_allocated = true;
       }
@@ -517,11 +520,10 @@ class MapAndBatchDatasetOp : public UnaryDatasetOpKernel {
             component_shape.set_dim(0, result->num_elements);
             AllocatorAttributes attr;
             attr.set_gpu_compatible(true);
-            Tensor component(ctx->allocator(attr), output[i].dtype(),
-                             component_shape);
-            TF_RETURN_IF_ERROR(
-                CopyPartialBatch(&component, output[i], result->num_elements));
-            out_tensors->emplace_back(std::move(component));
+            out_tensors->emplace_back(ctx->allocator(attr), output[i].dtype(),
+                                      component_shape);
+            TF_RETURN_IF_ERROR(CopyPartialBatch(&out_tensors->back(), output[i],
+                                                result->num_elements));
           }
           // Deallocate tensors allocated for the output.
           result->output.clear();

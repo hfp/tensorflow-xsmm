@@ -23,7 +23,6 @@ limitations under the License.
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/kernels/data/captured_function.h"
-#include "tensorflow/core/kernels/data/dataset.h"
 #include "tensorflow/core/kernels/inplace_ops_functor.h"
 #include "tensorflow/core/lib/core/blocking_counter.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -547,13 +546,12 @@ class NumaMapAndBatchDatasetOp : public UnaryDatasetOpKernel {
                 component_shape.set_dim(0, batches_[next_output_].error_index);
                 AllocatorAttributes attr;
                 attr.set_gpu_compatible(true);
-                Tensor component(ctx->allocator(attr),
-                                 batches_[next_output_].outputs[i].dtype(),
-                                 component_shape);
+                true_outputs.emplace_back(
+                    ctx->allocator(attr),
+                    batches_[next_output_].outputs[i].dtype(), component_shape);
                 TF_RETURN_IF_ERROR(CopyPartialBatch(
-                    &component, batches_[next_output_].outputs[i],
+                    &true_outputs.back(), batches_[next_output_].outputs[i],
                     batches_[next_output_].error_index));
-                true_outputs.emplace_back(std::move(component));
               }
               out_tensor->swap(true_outputs);
             }
@@ -937,9 +935,9 @@ class NumaMapAndBatchDatasetOp : public UnaryDatasetOpKernel {
           component_shape.AppendShape(map_fn_outputs.at(i).shape());
           AllocatorAttributes attr;
           attr.set_gpu_compatible(true);
-          Tensor component(ctx->allocator(attr), map_fn_outputs.at(i).dtype(),
-                           component_shape);
-          batch_outputs->emplace_back(std::move(component));
+          batch_outputs->emplace_back(ctx->allocator(attr),
+                                      map_fn_outputs.at(i).dtype(),
+                                      component_shape);
         }
       }
 

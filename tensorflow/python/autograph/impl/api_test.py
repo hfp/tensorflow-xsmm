@@ -296,6 +296,23 @@ class ApiTest(test.TestCase):
                              constant_op.constant(0))
       self.assertTrue(sess.run(x))
 
+  def test_converted_call_no_user_code(self):
+
+    def f(x):
+      return len(x)
+
+    opts = converter.ConversionOptions(internal_convert_user_code=False)
+
+    # f should not be converted, causing len to error out.
+    with self.assertRaisesRegexp(Exception,
+                                 'object of type \'Tensor\' has no len()'):
+      api.converted_call(f, None, opts, constant_op.constant([0]))
+
+    # len on the other hand should work fine.
+    x = api.converted_call(len, None, opts, constant_op.constant([0]))
+    # The constant has static shape so the result is a primitive not a Tensor.
+    self.assertEqual(x, 1)
+
   def test_to_graph_basic(self):
 
     def test_fn(x, s):
@@ -307,6 +324,21 @@ class ApiTest(test.TestCase):
 
     with self.cached_session() as sess:
       x = compiled_fn(constant_op.constant([4, 8]), 4)
+      self.assertListEqual([1, 2], sess.run(x).tolist())
+
+  def test_to_graph_with_defaults(self):
+
+    foo = 4
+
+    def test_fn(x, s=foo):
+      while tf.reduce_sum(x) > s:
+        x //= 2
+      return x
+
+    compiled_fn = api.to_graph(test_fn)
+
+    with self.cached_session() as sess:
+      x = compiled_fn(constant_op.constant([4, 8]))
       self.assertListEqual([1, 2], sess.run(x).tolist())
 
   def test_to_code_basic(self):

@@ -51,6 +51,7 @@ limitations under the License.
 
 using tensorflow::AttrValue;
 using tensorflow::DT_BOOL;
+using tensorflow::DT_COMPLEX64;
 using tensorflow::DT_FLOAT;
 using tensorflow::DT_INT32;
 using tensorflow::DT_INT64;
@@ -186,6 +187,8 @@ ArrayDataType ConvertDataType(tensorflow::DataType dtype) {
     return ArrayDataType::kInt64;
   else if (dtype == DT_STRING)
     return ArrayDataType::kString;
+  else if (dtype == DT_COMPLEX64)
+    return ArrayDataType::kComplex64;
   else
     LOG(INFO) << "Unsupported data type in placeholder op: " << dtype;
   return ArrayDataType::kNone;
@@ -254,6 +257,48 @@ tensorflow::Status ImportFloatArray(const TensorProto& input_tensor,
                      ") nor float_val (", input_tensor.float_val_size(),
                      ") have the right dimensions (", input_flat_size,
                      ") for this float tensor"));
+  }
+  return tensorflow::Status::OK();
+}
+
+tensorflow::Status ImportComplex64Array(const TensorProto& input_tensor,
+                                        Array* output_array) {
+  CHECK_EQ(input_tensor.dtype(), DT_COMPLEX64);
+  const auto& input_shape = input_tensor.tensor_shape();
+  CHECK_LE(input_shape.dim_size(), 4);
+  int input_flat_size;
+  auto status = ImportShape(input_shape.dim(), &input_flat_size,
+                            output_array->mutable_shape());
+  if (!status.ok()) return status;
+
+  auto& output_complex_data =
+      output_array->GetMutableBuffer<ArrayDataType::kComplex64>().data;
+  output_complex_data.resize(RequiredBufferSizeForShape(output_array->shape()),
+                             std::complex<float>(0.f, 0.f));
+  CHECK_GE(output_complex_data.size(), input_flat_size);
+  if (input_tensor.scomplex_val_size() == 2) {
+    for (int i = 0; i < input_flat_size; i++) {
+      output_complex_data[i] = std::complex<float>(
+          input_tensor.scomplex_val(0), input_tensor.scomplex_val(1));
+    }
+  } else if (input_tensor.scomplex_val_size() == 2 * input_flat_size) {
+    for (int i = 0; i < input_flat_size; ++i) {
+      output_complex_data[i] =
+          std::complex<float>(input_tensor.scomplex_val(2 * i),
+                              input_tensor.scomplex_val(2 * i + 1));
+    }
+  } else if (input_tensor.tensor_content().size() ==
+             input_flat_size * sizeof(std::complex<float>)) {
+    toco::port::CopyToBuffer(
+        input_tensor.tensor_content(),
+        reinterpret_cast<char*>(output_complex_data.data()));
+  } else {
+    return tensorflow::errors::InvalidArgument(absl::StrCat(
+        "Neither input_content (",
+        input_tensor.tensor_content().size() / sizeof(std::complex<float>),
+        ") nor scomplex_val (", input_tensor.scomplex_val_size(),
+        ") have the right dimensions (", input_flat_size,
+        ") for this complex64 tensor"));
   }
   return tensorflow::Status::OK();
 }
@@ -536,6 +581,10 @@ tensorflow::Status ConvertConstOperator(
     case DT_BOOL:
       array.data_type = ArrayDataType::kBool;
       status = ImportBoolArray(tensor, &array);
+      break;
+    case DT_COMPLEX64:
+      array.data_type = ArrayDataType::kComplex64;
+      status = ImportComplex64Array(tensor, &array);
       break;
     default:
       array.data_type = ArrayDataType::kNone;
@@ -1384,6 +1433,25 @@ tensorflow::Status ConvertResizeBilinearOperator(
   return tensorflow::Status::OK();
 }
 
+tensorflow::Status ConvertResizeNearestNeighborOperator(
+    const NodeDef& node, const TensorFlowImportFlags& tf_import_flags,
+    Model* model) {
+  CHECK_EQ(node.op(), "ResizeNearestNeighbor");
+  TF_QCHECK_OK(CheckInputsCount(node, tf_import_flags, 2));
+  auto* op = new ResizeNearestNeighborOperator;
+
+  op->align_corners = false;
+  if (HasAttr(node, "align_corners")) {
+    op->align_corners = GetBoolAttr(node, "align_corners");
+  }
+
+  op->inputs.push_back(node.input(0));
+  op->inputs.push_back(node.input(1));
+  op->outputs.push_back(node.name());
+  model->operators.emplace_back(op);
+  return tensorflow::Status::OK();
+}
+
 tensorflow::Status ConvertBatchNormWithGlobalNormalizationOperator(
     const NodeDef& node, const TensorFlowImportFlags& tf_import_flags,
     Model* model) {
@@ -1653,9 +1721,6 @@ tensorflow::Status ConvertRangeOperator(
   op->inputs.push_back(node.input(1));
   op->inputs.push_back(node.input(2));
   op->outputs.push_back(node.name());
-
-  // For Flex mode. Please read the comments of the function.
-  RetainTensorFlowNodeDef(node, op);
 
   model->operators.emplace_back(op);
   return tensorflow::Status::OK();
@@ -2067,6 +2132,14 @@ using ConverterType = tensorflow::Status (*)(
     Model* model);
 using ConverterMapType = std::unordered_map<std::string, ConverterType>;
 
+ConverterMapType GetTensorFlowNodeConverterMapForFlex() {
+  return std::unordered_map<std::string, ConverterType>({
+      // We need to let TCO convert Placeholder information into
+      // array data, so that the data types are correct.
+      {"Placeholder", ConvertPlaceholderOperator},
+  });
+}
+
 ConverterMapType GetTensorFlowNodeConverterMap() {
   return std::unordered_map<std::string, ConverterType>({
       {"Add", ConvertSimpleOperator<AddOperator, 2>},
@@ -2150,6 +2223,7 @@ ConverterMapType GetTensorFlowNodeConverterMap() {
       {"Relu6", ConvertSimpleOperator<Relu6Operator, 1>},
       {"Reshape", ConvertSimpleOperator<TensorFlowReshapeOperator, 2>},
       {"ResizeBilinear", ConvertResizeBilinearOperator},
+      {"ResizeNearestNeighbor", ConvertResizeNearestNeighborOperator},
       {"Rsqrt", ConvertSimpleOperator<TensorFlowRsqrtOperator, 1>},
       {"Select", ConvertSimpleOperator<SelectOperator, 3>},
       {"Shape", ConvertShapeOperator},
@@ -2223,6 +2297,8 @@ std::unique_ptr<Model> ImportTensorFlowGraphDef(
   // converted to TFLite Flex ops.
   if (!tf_import_flags.import_all_ops_as_unsupported) {
     converter_map = internal::GetTensorFlowNodeConverterMap();
+  } else {
+    converter_map = internal::GetTensorFlowNodeConverterMapForFlex();
   }
 
   for (auto node : inlined_graph.node()) {

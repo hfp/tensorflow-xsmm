@@ -12,10 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/graph/graph.h"
-#include "tensorflow/core/kernels/data/dataset.h"
 #include "tensorflow/core/util/batch_util.h"
 
 namespace tensorflow {
@@ -125,10 +125,11 @@ class TensorSliceDatasetOp : public DatasetOpKernel {
           out_tensors->reserve(dataset()->tensors_.size());
           for (int i = 0; i < dataset()->tensors_.size(); ++i) {
             const Tensor& t = dataset()->tensors_[i];
-            Tensor t_slice(ctx->allocator({}), t.dtype(),
-                           TensorShape(dataset()->shapes_[i].dim_sizes()));
-            TF_RETURN_IF_ERROR(batch_util::CopySliceToElement(t, &t_slice, i_));
-            out_tensors->emplace_back(std::move(t_slice));
+            out_tensors->emplace_back(
+                ctx->allocator({}), t.dtype(),
+                TensorShape(dataset()->shapes_[i].dim_sizes()));
+            TF_RETURN_IF_ERROR(
+                batch_util::CopySliceToElement(t, &out_tensors->back(), i_));
           }
           ++i_;
           *end_of_sequence = false;

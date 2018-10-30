@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/core/grappler/clusters/virtual_cluster.h"
 #include "tensorflow/core/grappler/grappler_item.h"
 #include "tensorflow/core/grappler/optimizers/meta_optimizer.h"
+#include "tensorflow/core/grappler/utils/functions.h"
 #include "tensorflow/core/protobuf/rewriter_config.pb.h"
 #include "tensorflow/core/util/ptr_util.h"
 #include "tensorflow/core/util/reffed_status_callback.h"
@@ -130,8 +131,11 @@ class PartitionedCallOp : public AsyncOpKernel {
                              "find cached function partitions; "
                              "this indicates a bug."),
             done);
-        FunctionLibraryDefinition* overlay_lib =
-            new FunctionLibraryDefinition(*lib->GetFunctionLibraryDefinition());
+        // We do not need a full function library in the overlay, we just keep a
+        // subset that is reachable from the instantiated function.
+        FunctionLibraryDefinition* overlay_lib = new FunctionLibraryDefinition(
+            grappler::ReachableFunctionLibraryDefinition(
+                *lib->GetFunctionLibraryDefinition(), fbody->fdef));
         overlay_libs_.emplace(lib, overlay_lib);
 
         GraphOptimizationPassOptions optimization_options;

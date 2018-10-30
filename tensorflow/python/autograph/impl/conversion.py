@@ -24,6 +24,7 @@ import gast
 
 from tensorflow.python.autograph import operators
 from tensorflow.python.autograph import utils
+from tensorflow.python.autograph.converters import arg_defaults
 from tensorflow.python.autograph.converters import asserts
 from tensorflow.python.autograph.converters import break_statements
 from tensorflow.python.autograph.converters import builtin_functions
@@ -288,6 +289,7 @@ def function_to_graph(f,
 
   node, source = parser.parse_entity(f)
   node = node.body[0]
+  # TODO(znado): Place inside standard_analysis.
   origin_info.resolve(node, source, f)
   namespace = inspect_utils.getnamespace(f)
   _add_self_references(namespace, program_ctx.autograph_module)
@@ -339,7 +341,9 @@ def node_to_graph(node, context, rewrite_errors=True):
   # TODO(mdan): Is it feasible to reconstruct intermediate source code?
   context.info.source_code = None
 
-  node = converter.apply_(node, context, decorators)
+  if context.program.options.uses(converter.Feature.DECORATORS):
+    node = converter.apply_(node, context, decorators)
+  node = converter.apply_(node, context, arg_defaults)
   node = converter.apply_(node, context, directives)
   node = converter.apply_(node, context, break_statements)
   node = converter.apply_(node, context, asserts)

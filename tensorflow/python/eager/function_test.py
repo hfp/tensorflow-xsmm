@@ -85,7 +85,6 @@ class DefunnedMiniModel(MiniModel):
     return super(DefunnedMiniModel, self).call(inputs, training=training)
 
 
-@test_util.with_c_shapes
 class FunctionTest(test.TestCase, parameterized.TestCase):
 
   def testBasic(self):
@@ -109,6 +108,21 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     with context.rewriter_config(rewrites):
       t = constant_op.constant(1.0)
       self.assertAllEqual(add(t, t).numpy(), 2.0)
+
+  def testFuncName(self):
+
+    @function.defun_with_attributes(attributes={'func_name': 'multiply'})
+    def add(x, y):
+      _ = x * y
+      return x + y
+
+    @function.defun
+    def add_2(x, y):
+      _ = x * y
+      return x + y
+
+    self.assertEqual(add._name, 'multiply')
+    self.assertEqual(add_2._name, 'add_2')
 
   def testBasicGraphMode(self):
     matmul = def_function.function(math_ops.matmul)
@@ -149,7 +163,7 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
 
   def testGraphGradientVariable(self):
     with ops.Graph().as_default(), self.cached_session():
-      v = resource_variable_ops.ResourceVariable(1.0)
+      v = variables.Variable(1.0)
 
       @def_function.function
       def f():
@@ -163,9 +177,9 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
 
   def testGraphEagerIsolation(self):
 
-    @def_function.function
+    @function.defun
     def f():
-      self.v = resource_variable_ops.ResourceVariable(1.0)
+      self.v = variables.Variable(1.0)
       return self.v.read_value()
 
     self.assertAllEqual(f(), 1.0)
@@ -214,14 +228,23 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
       ((a, b),) = mats
       return matmul(a, b)
 
+    with self.assertRaisesRegexp(ValueError, "two arguments named 'mats'"):
+      sq.get_concrete_function(
+          [(tensor_spec.TensorSpec((None, None), dtypes.float32),
+            tensor_spec.TensorSpec((None, None), dtypes.float32))])
     sq_op = sq.get_concrete_function(
-        [(tensor_spec.TensorSpec((None, None), dtypes.float32),
-          tensor_spec.TensorSpec((None, None), dtypes.float32))])
+        [(tensor_spec.TensorSpec((None, None), dtypes.float32,
+                                 name='first_mat'),
+          tensor_spec.TensorSpec((None, None), dtypes.float32,
+                                 name='second_mat'))])
     self.assertEqual([None, None], sq_op.output_shapes.as_list())
 
     t1 = constant_op.constant([[1.0, 2.0], [3.0, 4.0]])
     t2 = constant_op.constant([[1.4, 2.4], [3.4, 4.4]])
-    out = sq_op(t1, t2)  # Flattened structure for inputs to the graph function
+    with self.assertRaisesRegexp(
+        TypeError, 'bound to Tensors within nested structures'):
+      sq_op(t1, t2)
+    out = sq_op(first_mat=t1, second_mat=t2)
     self.assertAllEqual(out, math_ops.matmul(t1, t2).numpy())
 
   def testExecutingStatelessDefunConcurrently(self):
@@ -237,9 +260,6 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     self.assertSequenceEqual(outputs, expected)
 
   def testExecutingManyStatelessDefunsConcurrently(self):
-    # TODO(nareshmodi): Re-enable this test when grappler is faster, or
-    # simply disable grappler for this test.
-    self.skipTest('Very slow with grappler enabled, in fastbuild mode.')
 
     @def_function.function
     def stateless(x):
@@ -269,9 +289,6 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     self.assertEqual(float(v.read_value()), 0.0)
 
   def testExecutingManyStatefulDefunsConcurrently(self):
-    # TODO(nareshmodi): Re-enable this test when grappler is faster, or
-    # simply disable grappler for this test.
-    self.skipTest('Very slow with grappler enabled, in fastbuild mode.')
 
     v = resource_variable_ops.ResourceVariable(1.0)
 
@@ -335,10 +352,11 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
       return matmul(inputs.a['a'], inputs.b['b'])
 
     t = constant_op.constant([[1.0, 2.0], [3.0, 4.0]])
-    inputs = pair({'a': t}, {'b': t})
-    sq_op = a_times_b.get_concrete_function(inputs)
+    sq_op = a_times_b.get_concrete_function(
+        pair(dict(a=tensor_spec.TensorSpec([2, 2], dtypes.float32, 'a')),
+             dict(b=tensor_spec.TensorSpec([2, 2], dtypes.float32, 'b'))))
     self.assertEqual(sq_op.output_shapes, tensor_shape.TensorShape([2, 2]))
-    out = sq_op(inputs)
+    out = sq_op(a=t, b=t)
     self.assertAllEqual(out, math_ops.matmul(t, t).numpy())
 
   def testNestedOutputGraphFunction(self):
@@ -669,7 +687,7 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
 
   def testSymbolicGradientVariableNoneNotZerosLike(self):
     with ops.Graph().as_default():
-      v = resource_variable_ops.ResourceVariable(1.0)
+      v = variables.Variable(1.0)
 
       @def_function.function
       def f(x, v):
@@ -684,7 +702,7 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
         self.assertEqual(dv, None)
 
   def testGraphModeManyFunctions(self):
-    with context.graph_mode(), self.cached_session():
+    with ops.Graph().as_default(), self.cached_session():
 
       @def_function.function
       def f(x):
@@ -1797,9 +1815,13 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     signature = [tensor_spec.TensorSpec(shape=(2,), dtype=dtypes.float32)]
     defined = function.defun(foo, input_signature=signature)
     a = array_ops.ones([2])
-    out = defined(a)
+    self.assertAllEqual(a, defined(a))
     self.assertEqual(len(defined._function_cache), 1)
-    self.assertAllEqual(out, a)
+    self.assertAllEqual(a, defined.get_concrete_function()(a))
+    self.assertAllEqual(a, defined.get_concrete_function(a)(a))
+    self.assertAllEqual(a, defined.get_concrete_function(
+        tensor_spec.TensorSpec((2,), dtype=dtypes.float32))(a))
+    self.assertEqual(len(defined._function_cache), 1)
 
     def bar(a):
       self.assertEqual(a._shape_tuple(), (2, None))
@@ -1909,6 +1931,11 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     with self.assertRaisesRegexp(ValueError,
                                  'Structure of Python function inputs.*'):
       defined()
+
+    with self.assertRaisesRegexp(ValueError,
+                                 'inputs incompatible with input_signature'):
+      defined.get_concrete_function(
+          tensor_spec.TensorSpec(shape=(3,), dtype=dtypes.float32))
 
   def testInputSignatureForFunctionWithNonTensorInputsNotAllowed(self):
 
@@ -2240,7 +2267,7 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
     with context.graph_mode(), self.cached_session():
       with ops.get_default_graph().as_default():
         t = constant_op.constant([[1.0, 2.0], [3.0, 4.0]])
-        function.register_concrete(composite)
+        composite.add_to_graph(register_gradient_functions=True)
 
         graph = ops.get_default_graph()
         # pylint: disable=protected-access
@@ -2312,29 +2339,32 @@ class FunctionTest(test.TestCase, parameterized.TestCase):
         # pylint: disable=protected-access
         self.assertEqual(len(graph._functions), 3)
 
+  @test_util.run_in_graph_and_eager_modes
   def testBackwardNone(self):
-    with ops.Graph().as_default():
-      model = variables.Variable(1.0, name='model')
-      count = variables.Variable(0)
+    model = variables.Variable(1.0, name='model')
+    count = variables.Variable(0)
 
-      @function.defun
-      def forward_pass(value):
-        count.assign_add(1)
-        residuals = value - model
-        loss = 0.5 * math_ops.reduce_mean(math_ops.pow(residuals, 2))
-        # Note: count is an integer, so its doutput will be None
-        return loss, count
+    @function.defun
+    def forward_pass(value):
+      count.assign_add(1)
+      residuals = value - model
+      loss = 0.5 * math_ops.reduce_mean(math_ops.pow(residuals, 2))
+      # Note: count is an integer, so its doutput will be None
+      return loss, count
 
-      def reduce_fn(x):
-        loss, count = forward_pass(x)
-        grad_only = gradients_impl.gradients(loss, model)
-        return grad_only, count
+    def reduce_fn(x):
+      if context.executing_eagerly():
+        with backprop.GradientTape() as t:
+          loss, count = forward_pass(x)
+        return t.gradient(loss, model), count
+      loss, count = forward_pass(x)
+      grad_only = gradients_impl.gradients(loss, model)
+      return grad_only, count
 
-      do_it = reduce_fn(constant_op.constant([7.0]))
+    g, _ = reduce_fn(constant_op.constant([7.0]))
 
-      with self.test_session() as sess:
-        sess.run([variables.global_variables_initializer()])
-        self.assertAllEqual(sess.run(do_it), [[-6.0], 1])
+    self.evaluate(variables.global_variables_initializer())
+    self.assertAllEqual(nest.flatten(self.evaluate(g)), [-6.0])
 
   def testCallingFunctionWithDifferentVariables(self):
 
@@ -2697,6 +2727,30 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
         [b'a', b'b'],
         [inp.op.get_attr('_user_specified_name') for inp in fn_op.inputs])
     self.assertEqual(2, len(fn_op.graph.structured_outputs))
+    self.assertAllClose(
+        [3., 2.],
+        fn_op(constant_op.constant(1.), constant_op.constant(2.)))
+    self.assertAllClose(
+        [3., 2.],
+        fn_op(a=constant_op.constant(1.), b=constant_op.constant(2.)))
+
+  def testVariable(self, function_decorator):
+    @function_decorator
+    def fn(a, b):
+      return a + b, a * b
+    # Call the function to make def_function happy
+    fn(array_ops.ones([]), array_ops.ones([]))
+
+    fn_op = fn.get_concrete_function(
+        tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32),
+        variables.Variable(1.))
+    self.assertEqual(
+        ['a', 'b'],
+        [inp.op.name for inp in fn_op.inputs])
+    self.assertEqual(
+        [b'a', b'b'],
+        [inp.op.get_attr('_user_specified_name') for inp in fn_op.inputs])
+    self.assertEqual(2, len(fn_op.graph.structured_outputs))
 
   def testDictReturned(self, function_decorator):
     @function_decorator
@@ -2718,28 +2772,38 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
     self.assertEqual({'alpha', 'beta'},
                      set(fn_op.graph.structured_outputs.keys()))
 
+    with self.assertRaisesRegexp(ValueError, "two arguments named 'z'"):
+      fn.get_concrete_function(
+          z=(tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32),
+             tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32)),
+          y=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32,
+                                   name='custom'),
+          x=4.)
     fn_op2 = fn.get_concrete_function(
-        z=(tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32),
-           tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32)),
+        z=(tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32,
+                                  name='z_first'),
+           tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32,
+                                  name='z_second')),
         y=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='custom'),
         x=4.)
     self.assertEqual(
-        ['z', 'z_1', 'custom'],
+        ['z_first', 'z_second', 'custom'],
         [inp.op.name for inp in fn_op2.inputs])
     self.assertEqual(
-        [b'z', b'z', b'custom'],
+        [b'z_first', b'z_second', b'custom'],
         [inp.op.get_attr('_user_specified_name') for inp in fn_op2.inputs])
 
     fn_op3 = fn.get_concrete_function(
         tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='custom'),
-        z=(tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32),
-           tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32)),
-        y=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='custom'))
+        z=(tensor_spec.TensorSpec(shape=(None,), dtype=dtypes.float32,
+                                  name='z1'),
+           tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='z2')),
+        y=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32))
     self.assertEqual(
-        ['custom', 'z', 'z_1', 'custom_1'],
+        ['custom', 'z1', 'z2', 'y'],
         [inp.op.name for inp in fn_op3.inputs])
     self.assertEqual(
-        [b'custom', b'z', b'z', b'custom'],
+        [b'custom', b'z1', b'z2', b'y'],
         [inp.op.get_attr('_user_specified_name') for inp in fn_op3.inputs])
 
   def testMethod(self, function_decorator):
@@ -2823,14 +2887,15 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
         tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
         tensor_spec.TensorSpec(shape=None, dtype=dtypes.float32, name='y'),
         tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
-        tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
+        tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32,
+                               name='second_variadic'),
         z=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
         zz=tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='cust'))
     self.assertEqual(
-        ['x', 'y', 'args', 'args_1', 'z', 'cust'],
+        ['x', 'y', 'args', 'second_variadic', 'z', 'cust'],
         [inp.op.name for inp in variadic_op.inputs])
     self.assertEqual(
-        [b'x', b'y', b'args', b'args', b'z', b'cust'],
+        [b'x', b'y', b'args', b'second_variadic', b'z', b'cust'],
         [inp.op.get_attr('_user_specified_name')
          for inp in variadic_op.inputs])
 
@@ -2840,7 +2905,7 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
             tensor_spec.TensorSpec(shape=None, dtype=dtypes.float32),
             tensor_spec.TensorSpec(shape=None, dtype=dtypes.float32, name='y'),
             tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
-            tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32),
+            tensor_spec.TensorSpec(shape=(), dtype=dtypes.float32, name='z'),
         ))
     def variadic_fn(x, *args):
       return x + math_ops.add_n(list(args))
@@ -2851,17 +2916,22 @@ class ArgumentNamingTests(test.TestCase, parameterized.TestCase):
     variadic_op = variadic_fn.get_concrete_function()
     self.assertIn(b'variadic_fn', variadic_op.name)
     self.assertEqual(
-        ['x', 'y', 'args', 'args_1'],
+        ['x', 'y', 'args', 'z'],
         [inp.op.name for inp in variadic_op.inputs])
     self.assertEqual(
-        [b'x', b'y', b'args', b'args'],
+        [b'x', b'y', b'args', b'z'],
         [inp.op.get_attr('_user_specified_name')
          for inp in variadic_op.inputs])
 
 
-class DefunCollectionTest(test.TestCase):
+class DefunCollectionTest(test.TestCase, parameterized.TestCase):
 
-  def testCollectionValueAccess(self):
+  @parameterized.named_parameters(
+      dict(testcase_name='Defun', function_decorator=function.defun),
+      dict(
+          testcase_name='DefFunction',
+          function_decorator=def_function.function))
+  def testCollectionValueAccess(self, function_decorator):
     """Read values from graph collections inside of defun."""
     with ops.Graph().as_default() as g:
       with self.session(graph=g):
@@ -2870,7 +2940,7 @@ class DefunCollectionTest(test.TestCase):
         ops.add_to_collection('x', x)
         ops.add_to_collection('y', y)
 
-        @function.defun
+        @function_decorator
         def fn():
           x_const = constant_op.constant(ops.get_collection('x')[0])
           y_const = constant_op.constant(ops.get_collection('y')[0])
@@ -2883,13 +2953,18 @@ class DefunCollectionTest(test.TestCase):
         self.assertEquals(ops.get_collection('y'), [5])
         self.assertEquals(ops.get_collection('z'), [])
 
-  def testCollectionVariableValueAccess(self):
+  @parameterized.named_parameters(
+      dict(testcase_name='Defun', function_decorator=function.defun),
+      dict(
+          testcase_name='DefFunction',
+          function_decorator=def_function.function))
+  def testCollectionVariableValueAccess(self, function_decorator):
     """Read variable value from graph collections inside of defun."""
     with ops.Graph().as_default() as g:
       with self.session(graph=g):
         v = resource_variable_ops.ResourceVariable(1.0)
 
-        @function.defun
+        @function_decorator
         def f():
           return v.read_value()
 

@@ -27,17 +27,129 @@ limitations under the License.
 
 #define ALLOW_SLOW_GENERIC_DEPTHWISECONV_FALLBACK
 #include "tensorflow/contrib/lite/kernels/internal/optimized/depthwiseconv_uint8.h"
+#include "tensorflow/contrib/lite/kernels/internal/optimized/depthwiseconv_uint8_3x3_filter.h"
 #include "tensorflow/contrib/lite/kernels/internal/reference/depthwiseconv_uint8.h"
 
 namespace tflite {
 namespace {
 
+enum class ForceKernelInvocation {
+  // Run all tests against kUseStandardEntry even if also testing another
+  // kernel, since we need to be sure that the main DepthwiseConv() function in
+  // optimized_ops.h dispatches to a correctly-executing kernel.
+  kNone = 0,  // The "default" option: use the normal DepthwiseConv
+              // kernel (entry) function.
+  kUseGenericKernel,
+  kUseNeon3x3,            // 3x3 kernel that uses NEON when available.
+  kUseNeon3x3DotProduct,  // 3x3 kernel that uses dot-product enabled NEON when
+                          // available.
+};
+
+inline void DispatchDepthwiseConv(
+    ForceKernelInvocation forced_invocation, const DepthwiseParams& params,
+    const RuntimeShape& input_shape, const uint8* input_data,
+    const RuntimeShape& filter_shape, const uint8* filter_data,
+    const RuntimeShape& bias_shape, const int32* bias_data,
+    const RuntimeShape& output_shape, uint8* output_data) {
+  switch (forced_invocation) {
+    case ForceKernelInvocation::kUseNeon3x3: {
+// Enable for arm64 except for the Nvidia Linux 4 Tegra (L4T) running on
+// Jetson TX-2. This compiler does not support the offsetof() macro.
+#if defined(__aarch64__) && !defined(GOOGLE_L4T)
+      const int stride_width = params.stride_width;
+      const int stride_height = params.stride_height;
+      const int pad_width = params.padding_values.width;
+      const int pad_height = params.padding_values.height;
+      const int output_shift = params.output_shift;
+      const int depth_multiplier = params.depth_multiplier;
+      const int dilation_width_factor = params.dilation_width_factor;
+      const int dilation_height_factor = params.dilation_height_factor;
+
+      // Check that parameter combination is supported.
+      const bool basic_3x3_kernel_supported =
+          optimized_ops::Fast3x3FilterKernelSupported(
+              input_shape, filter_shape, stride_width, stride_height,
+              dilation_width_factor, dilation_height_factor, pad_width,
+              pad_height, depth_multiplier, output_shape, output_shift);
+      ASSERT_TRUE(basic_3x3_kernel_supported)
+          << "pad_width = " << params.padding_values.width
+          << " pad_height = " << params.padding_values.height
+          << " input_width = " << input_shape.Dims(1)
+          << " input_height = " << input_shape.Dims(2)
+          << " output_width = " << output_shape.Dims(1)
+          << " output_height = " << output_shape.Dims(2);
+
+      // Call kernel optimized for depthwise convolutions using 3x3 filters.
+      optimized_ops::DepthwiseConv3x3Filter(
+          params, input_shape, input_data, filter_shape, filter_data,
+          bias_shape, bias_data, output_shape, output_data);
+      return;
+#else
+      break;
+#endif
+    }
+    case ForceKernelInvocation::kUseNeon3x3DotProduct: {
+// Enable for arm64 except for the Nvidia Linux 4 Tegra (L4T) running on
+// Jetson TX-2. This compiler does not support the offsetof() macro.
+#if defined(__ARM_FEATURE_DOTPROD) && defined(__aarch64__) && \
+    !defined(GOOGLE_L4T)
+      using optimized_ops::DotProduct3x3KernelType;
+      DotProduct3x3KernelType kernel_type =
+          optimized_ops::CategorizeDotProductKernel(params);
+      switch (kernel_type) {
+        case DotProduct3x3KernelType::kPlain:
+          // TODO(b/118430534): Implement optimized kernel.
+          optimized_ops::DepthwiseConv3x3Filter(
+              params, input_shape, input_data, filter_shape, filter_data,
+              bias_shape, bias_data, output_shape, output_data);
+          return;
+        case DotProduct3x3KernelType::kWithDepthMultiplication:
+          // TODO(b/118430338): Implement optimized kernel.
+          optimized_ops::DepthwiseConvGeneral(
+              params, input_shape, input_data, filter_shape, filter_data,
+              bias_shape, bias_data, output_shape, output_data);
+          return;
+        case DotProduct3x3KernelType::kWithPad0Stride2:
+          // TODO(b/118430338): Implement optimized kernel.
+          optimized_ops::DepthwiseConv3x3Filter(
+              params, input_shape, input_data, filter_shape, filter_data,
+              bias_shape, bias_data, output_shape, output_data);
+          return;
+        case DotProduct3x3KernelType::kWithPad1Stride1:
+          // TODO(b/118430338): Implement optimized kernel.
+          optimized_ops::DepthwiseConvGeneral(
+              params, input_shape, input_data, filter_shape, filter_data,
+              bias_shape, bias_data, output_shape, output_data);
+          return;
+        case DotProduct3x3KernelType::kNone:
+        default:
+          break;
+      }
+#endif
+      break;
+    }
+    case ForceKernelInvocation::kUseGenericKernel: {
+      optimized_ops::DepthwiseConvGeneral(params, input_shape, input_data,
+                                          filter_shape, filter_data, bias_shape,
+                                          bias_data, output_shape, output_data);
+      return;
+    }
+    case ForceKernelInvocation::kNone:
+    default:
+      break;
+  }
+  optimized_ops::DepthwiseConv(params, input_shape, input_data, filter_shape,
+                               filter_data, bias_shape, bias_data, output_shape,
+                               output_data);
+}
+
 // Runs the DepthwiseConv and compares against the reference implementation.
 int TestOneDepthwiseConvWithGivenOutputShift(
-    const std::uint8_t* input_data, const RuntimeShape& input_shape,
-    std::int32_t input_offset, const std::uint8_t* filter_data,
-    const RuntimeShape& filter_shape, std::int32_t filter_offset,
-    const std::int32_t* bias_data, const RuntimeShape& bias_shape, int stride,
+    ForceKernelInvocation forced_invocation, const std::uint8_t* input_data,
+    const RuntimeShape& input_shape, std::int32_t input_offset,
+    const std::uint8_t* filter_data, const RuntimeShape& filter_shape,
+    std::int32_t filter_offset, const std::int32_t* bias_data,
+    const RuntimeShape& bias_shape, int stride, PaddingType padding_type,
     int pad_width, int pad_height, int depth_multiplier,
     std::int32_t output_offset, std::int32_t output_multiplier,
     int output_shift, std::int32_t output_activation_min,
@@ -47,7 +159,7 @@ int TestOneDepthwiseConvWithGivenOutputShift(
   std::vector<std::uint8_t> reference_output_data(output_buffer_size);
 
   tflite::DepthwiseParams op_params;
-  op_params.padding_type = PaddingType::kSame;
+  op_params.padding_type = padding_type;
   op_params.padding_values.width = pad_width;
   op_params.padding_values.height = pad_height;
   op_params.stride_width = stride;
@@ -65,9 +177,9 @@ int TestOneDepthwiseConvWithGivenOutputShift(
   reference_ops::DepthwiseConv(op_params, input_shape, input_data, filter_shape,
                                filter_data, bias_shape, bias_data, output_shape,
                                reference_output_data.data());
-  optimized_ops::DepthwiseConv(op_params, input_shape, input_data, filter_shape,
-                               filter_data, bias_shape, bias_data, output_shape,
-                               output_data.data());
+  DispatchDepthwiseConv(forced_invocation, op_params, input_shape, input_data,
+                        filter_shape, filter_data, bias_shape, bias_data,
+                        output_shape, output_data.data());
   int saturated_min = 0;
   int saturated_max = 0;
   std::vector<int> diff(output_buffer_size);
@@ -115,10 +227,11 @@ int TestOneDepthwiseConvWithGivenOutputShift(
 // becomes
 // vacuous. So we just bisect our way to reasonable output_shift values.
 void TestOneDepthwiseConvBisectOutputShift(
-    const std::uint8_t* input_data, const RuntimeShape& input_shape,
-    std::int32_t input_offset, const std::uint8_t* filter_data,
-    const RuntimeShape& filter_shape, std::int32_t filter_offset,
-    const std::int32_t* bias_data, const RuntimeShape& bias_shape, int stride,
+    ForceKernelInvocation forced_invocation, const std::uint8_t* input_data,
+    const RuntimeShape& input_shape, std::int32_t input_offset,
+    const std::uint8_t* filter_data, const RuntimeShape& filter_shape,
+    std::int32_t filter_offset, const std::int32_t* bias_data,
+    const RuntimeShape& bias_shape, int stride, PaddingType padding_type,
     int pad_width, int pad_height, int depth_multiplier,
     std::int32_t output_offset, std::int32_t output_multiplier,
     int output_activation_bisect_start, int output_activation_bisect_end,
@@ -129,9 +242,9 @@ void TestOneDepthwiseConvBisectOutputShift(
   int output_shift_bisect_midpoint =
       (output_activation_bisect_start + output_activation_bisect_end) / 2;
   int bisect_result = TestOneDepthwiseConvWithGivenOutputShift(
-      input_data, input_shape, input_offset, filter_data, filter_shape,
-      filter_offset, bias_data, bias_shape, stride, pad_width, pad_height,
-      depth_multiplier, output_offset, output_multiplier,
+      forced_invocation, input_data, input_shape, input_offset, filter_data,
+      filter_shape, filter_offset, bias_data, bias_shape, stride, padding_type,
+      pad_width, pad_height, depth_multiplier, output_offset, output_multiplier,
       output_shift_bisect_midpoint, output_activation_min,
       output_activation_max, output_shape);
   // At this point we know that the test succeeded (otherwise it would have
@@ -156,31 +269,33 @@ void TestOneDepthwiseConvBisectOutputShift(
                                              ? output_activation_bisect_end
                                              : output_shift_bisect_midpoint;
   TestOneDepthwiseConvBisectOutputShift(
-      input_data, input_shape, input_offset, filter_data, filter_shape,
-      filter_offset, bias_data, bias_shape, stride, pad_width, pad_height,
-      depth_multiplier, output_offset, output_multiplier,
+      forced_invocation, input_data, input_shape, input_offset, filter_data,
+      filter_shape, filter_offset, bias_data, bias_shape, stride, padding_type,
+      pad_width, pad_height, depth_multiplier, output_offset, output_multiplier,
       new_output_activation_bisect_start, new_output_activation_bisect_end,
       output_activation_min, output_activation_max, output_shape);
 }
 
 void TestOneDepthwiseConv(
-    const std::uint8_t* input_data, const RuntimeShape& input_shape,
-    std::int32_t input_offset, const std::uint8_t* filter_data,
-    const RuntimeShape& filter_shape, std::int32_t filter_offset,
-    const std::int32_t* bias_data, const RuntimeShape& bias_shape, int stride,
+    ForceKernelInvocation forced_invocation, const std::uint8_t* input_data,
+    const RuntimeShape& input_shape, std::int32_t input_offset,
+    const std::uint8_t* filter_data, const RuntimeShape& filter_shape,
+    std::int32_t filter_offset, const std::int32_t* bias_data,
+    const RuntimeShape& bias_shape, int stride, PaddingType padding_type,
     int pad_width, int pad_height, int depth_multiplier,
     std::int32_t output_offset, std::int32_t output_multiplier,
     std::int32_t output_activation_min, std::int32_t output_activation_max,
     const RuntimeShape& output_shape) {
   TestOneDepthwiseConvBisectOutputShift(
-      input_data, input_shape, input_offset, filter_data, filter_shape,
-      filter_offset, bias_data, bias_shape, stride, pad_width, pad_height,
-      depth_multiplier, output_offset, output_multiplier, 0, 32,
-      output_activation_min, output_activation_max, output_shape);
+      forced_invocation, input_data, input_shape, input_offset, filter_data,
+      filter_shape, filter_offset, bias_data, bias_shape, stride, padding_type,
+      pad_width, pad_height, depth_multiplier, output_offset, output_multiplier,
+      0, 32, output_activation_min, output_activation_max, output_shape);
 }
 
-bool TryTestDepthwiseConv(int batch, int input_depth, int input_width,
-                          int input_height, int filter_width, int filter_height,
+bool TryTestDepthwiseConv(ForceKernelInvocation forced_invocation, int batch,
+                          int input_depth, int input_width, int input_height,
+                          int filter_width, int filter_height,
                           int depth_multiplier, int stride,
                           int dilation_width_factor, int dilation_height_factor,
                           PaddingType padding_type) {
@@ -227,12 +342,12 @@ bool TryTestDepthwiseConv(int batch, int input_depth, int input_width,
   FillRandom(&input_data);
   FillRandom(&filter_data);
   FillRandom(&bias_data, -10000, 10000);
-  TestOneDepthwiseConv(input_data.data(), input_shape_inference, input_offset,
-                       filter_data.data(), filter_shape_inference,
-                       filter_offset, bias_data.data(), bias_shape_inference,
-                       stride, pad_width, pad_height, depth_multiplier,
-                       output_offset, output_multiplier, output_activation_min,
-                       output_activation_max, output_shape_inference);
+  TestOneDepthwiseConv(
+      forced_invocation, input_data.data(), input_shape_inference, input_offset,
+      filter_data.data(), filter_shape_inference, filter_offset,
+      bias_data.data(), bias_shape_inference, stride, padding_type, pad_width,
+      pad_height, depth_multiplier, output_offset, output_multiplier,
+      output_activation_min, output_activation_max, output_shape_inference);
   return true;
 }
 
@@ -240,7 +355,7 @@ bool TryTestDepthwiseConv(int batch, int input_depth, int input_width,
 // be legal. If they're not legal, it returns false. If they're legal,
 // it runs the DepthwiseConv test and returns true. This allows the caller
 // to loop until a test has been run.
-bool TryTestOneDepthwiseConv() {
+bool TryTestOneDepthwiseConv(ForceKernelInvocation forced_invocation) {
   // We have to pick a lot of positive values, where we are particularly
   // interested in small values because they are most likely to be special
   // cases in optimized implementations, and secondarily because they allow
@@ -259,18 +374,18 @@ bool TryTestOneDepthwiseConv() {
   const auto padding_type =
       UniformRandomInt(0, 1) ? PaddingType::kSame : PaddingType::kValid;
 
-  return TryTestDepthwiseConv(batch, input_depth, input_width, input_height,
-                              filter_width, filter_height, depth_multiplier,
-                              stride, dilation_width_factor,
-                              dilation_height_factor, padding_type);
+  return TryTestDepthwiseConv(
+      forced_invocation, batch, input_depth, input_width, input_height,
+      filter_width, filter_height, depth_multiplier, stride,
+      dilation_width_factor, dilation_height_factor, padding_type);
 }
 
 // Tests parameters for the 3x3 filter kernel.
-bool TryTestOneDepthwiseConv3x3Filter() {
+bool TryTestOneDepthwiseConv3x3Filter(ForceKernelInvocation forced_invocation) {
   const int batch = ExponentialRandomPositiveInt(0.9f, 3, 20);
   const int input_depth = 8 * ExponentialRandomPositiveInt(0.9f, 10, 50);
-  const int input_width = ExponentialRandomPositiveInt(0.9f, 20, 200);
-  const int input_height = ExponentialRandomPositiveInt(0.9f, 20, 200);
+  int input_width = ExponentialRandomPositiveInt(0.9f, 20, 200);
+  int input_height = ExponentialRandomPositiveInt(0.9f, 20, 200);
   const int filter_width = 3;
   const int filter_height = 3;
   const int depth_multiplier = 1;
@@ -278,38 +393,150 @@ bool TryTestOneDepthwiseConv3x3Filter() {
   // We don't support dilations in the 3x3 filter.
   const int dilation_width_factor = 1;
   const int dilation_height_factor = 1;
-  // Although the kernel supports only kValid padding, we test that kSame
-  // is using the correct code path.
   const auto padding_type =
       UniformRandomInt(0, 1) ? PaddingType::kSame : PaddingType::kValid;
 
-  return TryTestDepthwiseConv(batch, input_depth, input_width, input_height,
-                              filter_width, filter_height, depth_multiplier,
-                              stride, dilation_width_factor,
-                              dilation_height_factor, padding_type);
+  // Adjust for, or reject, special cases.
+  if (forced_invocation != ForceKernelInvocation::kNone) {
+    // With stride == 2 and SAME, padding width and height are the left and top
+    // padding amounts. When there is an even input dimension, padding + 1 is
+    // required on the right / bottom. This is not handled by these kernels, so
+    // we bump the input dimensions.
+    if (padding_type == PaddingType::kSame && stride == 2) {
+      input_width = 2 * (input_width / 2) + 1;
+      input_height = 2 * (input_height / 2) + 1;
+    }
+
+    // The padded 3x3 kernel (with kSame) does not support input_width == 1 when
+    // input_height > 1, and vice versa.
+    if (padding_type == PaddingType::kSame &&
+        (input_width > 1) != (input_height > 1)) {
+      return false;
+    }
+  }
+
+  return TryTestDepthwiseConv(
+      forced_invocation, batch, input_depth, input_width, input_height,
+      filter_width, filter_height, depth_multiplier, stride,
+      dilation_width_factor, dilation_height_factor, padding_type);
 }
 
-void TestOneDepthwiseConv() {
-  while (!TryTestOneDepthwiseConv()) {
+// Tests with parameters suited to dot-product-NEON 3x3 filter kernels.
+bool TryTestOneNeonDot3x3(ForceKernelInvocation forced_invocation,
+                          bool test_stride, bool test_pad,
+                          bool test_depth_multiplier) {
+  const int batch = 1;
+  const int input_depth = test_depth_multiplier
+                              ? 1
+                              : 8 * ExponentialRandomPositiveInt(0.9f, 10, 50);
+  const int input_width = ExponentialRandomPositiveInt(0.9f, 20, 200);
+  const int input_height = ExponentialRandomPositiveInt(0.9f, 20, 200);
+  const int filter_width = 3;
+  const int filter_height = 3;
+  const int depth_multiplier =
+      test_depth_multiplier ? 8 * ExponentialRandomPositiveInt(0.8f, 1, 6) : 1;
+  const int stride = test_stride ? 2 : 1;
+  // We don't support dilations in the 3x3 filter.
+  const int dilation_width_factor = 1;
+  const int dilation_height_factor = 1;
+  const auto padding_type = test_pad ? PaddingType::kSame : PaddingType::kValid;
+
+  return TryTestDepthwiseConv(
+      forced_invocation, batch, input_depth, input_width, input_height,
+      filter_width, filter_height, depth_multiplier, stride,
+      dilation_width_factor, dilation_height_factor, padding_type);
+}
+
+void TestOneDepthwiseConv(ForceKernelInvocation forced_invocation) {
+  while (!TryTestOneDepthwiseConv(forced_invocation)) {
   }
 }
 
-void TestOneDepthwiseConv3x3Filter() {
-  while (!TryTestOneDepthwiseConv3x3Filter()) {
+void TestOneDepthwiseConv3x3Filter(ForceKernelInvocation forced_invocation) {
+  while (!TryTestOneDepthwiseConv3x3Filter(forced_invocation)) {
+  }
+}
+
+void TestOneNeonDot3x3(ForceKernelInvocation forced_invocation,
+                       bool test_stride, bool test_pad,
+                       bool test_depth_multiplier) {
+  while (!TryTestOneNeonDot3x3(forced_invocation, test_stride, test_pad,
+                               test_depth_multiplier)) {
   }
 }
 
 TEST(TestDepthwiseConv, TestDepthwiseConv) {
   const int kTestsToRun = 10 * 1000;
   for (int i = 0; i < kTestsToRun; i++) {
-    TestOneDepthwiseConv();
+    TestOneDepthwiseConv(ForceKernelInvocation::kNone);
   }
 }
 
-TEST(TestDepthwiseConv3x3Filter, TestDepthwiseConv) {
+// Run basic coverage test against the generic kernel.
+TEST(TestDepthwiseConv, TestGenericKernel) {
+  const int kTestsToRun = 10 * 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneDepthwiseConv(ForceKernelInvocation::kUseGenericKernel);
+  }
+}
+
+TEST(TestDepthwiseConv, TestKernel3x3Filter) {
+  const int kTestsToRun = 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneDepthwiseConv3x3Filter(ForceKernelInvocation::kNone);
+  }
+}
+
+// While the 3x3 coverage test is primarily targeted at specialized kernels, we
+// also run it against the generic kernel, optionally with fewer invocations.
+TEST(TestDepthwiseConv, TestGenericKernel3x3Filter) {
+  const int kTestsToRun = 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneDepthwiseConv3x3Filter(ForceKernelInvocation::kUseGenericKernel);
+  }
+}
+
+TEST(TestDepthwiseConv, TestNeon3x3Filter) {
   const int kTestsToRun = 3 * 1000;
   for (int i = 0; i < kTestsToRun; i++) {
-    TestOneDepthwiseConv3x3Filter();
+    TestOneDepthwiseConv3x3Filter(ForceKernelInvocation::kUseNeon3x3);
+  }
+}
+
+// No stride, no depth multiplier, no pad.
+TEST(TestDepthwiseConv, TestNeonDot3x3Plain) {
+  const int kTestsToRun = 3 * 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneNeonDot3x3(ForceKernelInvocation::kUseNeon3x3DotProduct,
+                      /*test_stride=*/false, /*test_pad=*/false,
+                      /*test_depth_multiplier=*/false);
+  }
+}
+
+TEST(TestDepthwiseConv, TestNeonDot3x3DepthMultiplier) {
+  const int kTestsToRun = 3 * 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneNeonDot3x3(ForceKernelInvocation::kUseNeon3x3DotProduct,
+                      /*test_stride=*/false, /*test_pad=*/false,
+                      /*test_depth_multiplier=*/true);
+  }
+}
+
+TEST(TestDepthwiseConv, TestNeonDot3x3Stride2) {
+  const int kTestsToRun = 3 * 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneNeonDot3x3(ForceKernelInvocation::kUseNeon3x3DotProduct,
+                      /*test_stride=*/true, /*test_pad=*/false,
+                      /*test_depth_multiplier=*/false);
+  }
+}
+
+TEST(TestDepthwiseConv, TestNeonDot3x3Pad1) {
+  const int kTestsToRun = 3 * 1000;
+  for (int i = 0; i < kTestsToRun; i++) {
+    TestOneNeonDot3x3(ForceKernelInvocation::kUseNeon3x3DotProduct,
+                      /*test_stride=*/false, /*test_pad=*/true,
+                      /*test_depth_multiplier=*/false);
   }
 }
 
