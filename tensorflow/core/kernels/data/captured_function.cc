@@ -77,6 +77,8 @@ class SimpleStepStatsCollector : public StepStatsCollectorInterface {
       end_time_ns_ = Env::Default()->NowNanos();
     }
 
+    bool TrackAllocations() const override { return false; }
+
     void SetMemory(OpKernelContext* ctx) override {}
 
     void SetOutput(int slot, const Tensor* tensor) override {}

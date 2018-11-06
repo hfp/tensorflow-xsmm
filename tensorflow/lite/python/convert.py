@@ -116,12 +116,12 @@ def toco_convert_protos(model_flags_str, toco_flags_str, input_data_str):
   # TODO(aselle): When toco does not use fatal errors for failure, we can
   # switch this on.
   if not _toco_from_proto_bin:
-    model_str = _toco_python.TocoConvert(model_flags_str, toco_flags_str,
-                                         input_data_str)
-    if not model_str:
-      raise ConverterError(
-          "TOCO returned an empty string. See console for more info.")
-    return model_str
+    try:
+      model_str = _toco_python.TocoConvert(model_flags_str, toco_flags_str,
+                                           input_data_str)
+      return model_str
+    except Exception as e:
+      raise ConverterError("TOCO failed: %s" % e)
 
   # Windows and TemporaryFile are not that useful together,
   # since you cannot have two readers/writers. So we have to
@@ -293,10 +293,10 @@ def build_toco_convert_protos(input_tensors,
   toco.dump_graphviz_include_video = dump_graphviz_video
   if target_ops:
     if set(target_ops) == set([OpsSet.TFLITE_BUILTINS, OpsSet.SELECT_TF_OPS]):
-      toco.allow_flex_ops = True
+      toco.enable_select_tf_ops = True
     elif set(target_ops) == set([OpsSet.SELECT_TF_OPS]):
-      toco.allow_flex_ops = True
-      toco.force_flex_ops = True
+      toco.enable_select_tf_ops = True
+      toco.force_select_tf_ops = True
 
   model = _model_flags_pb2.ModelFlags()
   model.change_concat_input_ranges = change_concat_input_ranges

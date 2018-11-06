@@ -343,7 +343,7 @@ def toco_convert(graph_def_str, input_tensors, output_tensors,
       opts = ("--input_arrays={0} --output_arrays={1}".format(
           ",".join(input_arrays), ",".join(output_tensors)))
     elif FLAGS.run_with_flex:
-      opts += " --allow_flex_ops --force_flex_ops"
+      opts += " --enable_select_tf_ops --force_select_tf_ops"
     cmd = ("%s --input_file=%s --output_file=%s %s > %s 2>&1" %
            (bin_path, graphdef_file.name, output_file.name, opts,
             stdout_file.name))
@@ -806,6 +806,11 @@ def make_binary_op_tests(zip_path, binary_operator):
       "input_shape_1": [[]],
       "input_shape_2": [[]],
       "activation": [False]
+  }, {
+      "dtype": [tf.float32],
+      "input_shape_1": [[0]],
+      "input_shape_2": [[1]],
+      "activation": [False]
   }]
 
   def build_graph(parameters):
@@ -1134,7 +1139,7 @@ def make_gather_tests(zip_path):
       "params_shape": [[10], [1, 2, 20]],
       "indices_dtype": [tf.int32],
       "indices_shape": [[3], [5]],
-      "axis": [0, 1],
+      "axis": [-1, 0, 1],
   }]
 
   def build_graph(parameters):
@@ -1147,7 +1152,8 @@ def make_gather_tests(zip_path):
         dtype=parameters["indices_dtype"],
         name="indices",
         shape=parameters["indices_shape"])
-    out = tf.gather(params, indices, axis=parameters["axis"])
+    axis = min(len(parameters["params_shape"]), parameters["axis"])
+    out = tf.gather(params, indices, axis=axis)
     return [params, indices], [out]
 
   def build_inputs(parameters, sess, inputs, outputs):
