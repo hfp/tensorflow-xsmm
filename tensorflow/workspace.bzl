@@ -130,7 +130,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
-    native.new_http_archive(
+    tf_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
         patch_file = clean_dep("//third_party:eigen_reshaped.patch"),
