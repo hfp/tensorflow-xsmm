@@ -45,6 +45,7 @@ from tensorflow.python.autograph.core import config
 from tensorflow.python.autograph.core import converter
 from tensorflow.python.autograph.core import errors
 from tensorflow.python.autograph.core import function_wrapping
+from tensorflow.python.autograph.lang import special_functions
 from tensorflow.python.autograph.pyct import ast_util
 from tensorflow.python.autograph.pyct import compiler
 from tensorflow.python.autograph.pyct import inspect_utils
@@ -272,6 +273,7 @@ def _add_self_references(namespace, autograph_module):
     # TODO(mdan): Add safeguards against name clashes.
     # We don't want to create a submodule because we want the operators to be
     # accessible as ag__.<operator>
+    ag_internal.__dict__.update(special_functions.__dict__)
     ag_internal.__dict__.update(operators.__dict__)
 
   _add_reserved_symbol(namespace, 'ag__', ag_internal)
@@ -358,6 +360,9 @@ def node_to_graph(node, context):
   node = converter.apply_(node, context, logical_expressions)
   if context.program.options.uses(converter.Feature.AUTO_CONTROL_DEPS):
     node = converter.apply_(node, context, side_effect_guards)
-  node = converter.apply_(node, context, function_scopes)
-  node = converter.apply_(node, context, error_handlers)
+  # TODO(mdan): If function scopes ever does more, the toggle will need moving.
+  if context.program.options.uses(converter.Feature.NAME_SCOPES):
+    node = converter.apply_(node, context, function_scopes)
+  if context.program.options.uses(converter.Feature.ERROR_REWRITING):
+    node = converter.apply_(node, context, error_handlers)
   return node

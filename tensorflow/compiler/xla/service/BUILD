@@ -647,6 +647,7 @@ cc_library(
         ":allocation_tracker",
         ":backend",
         ":channel_tracker",
+        ":compilation_cache",
         ":compiler",
         ":computation_layout",
         ":device_memory_allocator",
@@ -811,6 +812,7 @@ tf_cc_test(
         "//tensorflow/compiler/xla:test_helpers",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
         "//tensorflow/core:ptr_util",
+        "//tensorflow/core:stream_executor_no_cuda",
         "//tensorflow/core:test",
         "@com_google_absl//absl/memory",
     ],
@@ -1697,6 +1699,19 @@ cc_library(
     ],
 )
 
+tf_cc_test(
+    name = "while_loop_analysis_test",
+    srcs = ["while_loop_analysis_test.cc"],
+    deps = [
+        ":while_loop_analysis",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/tests:hlo_verified_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:test",
+    ],
+)
+
 cc_library(
     name = "while_loop_simplifier",
     srcs = ["while_loop_simplifier.cc"],
@@ -2333,6 +2348,20 @@ tf_cc_test(
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
         "//tensorflow/core:lib",
         "//tensorflow/core:test",
+    ],
+)
+
+cc_library(
+    name = "compilation_cache",
+    srcs = ["compilation_cache.cc"],
+    hdrs = ["compilation_cache.h"],
+    deps = [
+        ":executable",
+        ":hlo_module_config",
+        "//tensorflow/compiler/xla:types",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/core:lib",
     ],
 )
 
@@ -3281,6 +3310,8 @@ cc_library(
         ":tuple_util",
         "//tensorflow/compiler/xla:literal_util",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -3307,6 +3338,7 @@ cc_library(
         ":hlo",
         ":hlo_pass",
         ":tuple_util",
+        ":while_loop_analysis",
         ":while_util",
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:util",
