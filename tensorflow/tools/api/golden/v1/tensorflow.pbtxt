@@ -533,6 +533,10 @@ tf_module {
     mtype: "<type \'module\'>"
   }
   member {
+    name: "signal"
+    mtype: "<type \'module\'>"
+  }
+  member {
     name: "sparse"
     mtype: "<type \'module\'>"
   }
@@ -1559,6 +1563,10 @@ tf_module {
   member_method {
     name: "negative"
     argspec: "args=[\'x\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
+  }
+  member_method {
+    name: "no_gradient"
+    argspec: "args=[\'op_type\'], varargs=None, keywords=None, defaults=None"
   }
   member_method {
     name: "no_op"

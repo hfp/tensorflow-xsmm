@@ -122,7 +122,7 @@ def fit_loop(
         current_strategy, targets)
 
     # Create a train function that is composed of all the parameters above.
-    distributed_fit_function = K.Function(
+    distributed_fit_function = K.function(
         all_inputs,
         all_outputs,
         updates=all_updates,
@@ -133,7 +133,7 @@ def fit_loop(
     # placeholders that are created with default values.
     sample_weights = [None for _ in range(
         len(model.outputs) * current_strategy.num_replicas_in_sync)]
-    if model.uses_learning_phase and not isinstance(K.learning_phase(), int):
+    if not isinstance(K.learning_phase(), int):
       ins = dataset_inputs + dataset_targets + sample_weights + [1]
     else:
       ins = dataset_inputs + dataset_targets
@@ -279,7 +279,7 @@ def _experimental_fit_loop(
      all_session_args) = distributed_training_utils.unwrap_values(
          current_strategy, grouped_inputs, grouped_outputs,
          grouped_updates, grouped_session_args)
-    combined_fn = K.Function(
+    combined_fn = K.function(
         all_inputs,
         all_outputs,
         updates=all_updates,
@@ -459,7 +459,7 @@ def test_loop(model, iterator, verbose=0, steps=None):
     dataset_targets = distributed_training_utils.flatten_perdevice_values(
         current_strategy, targets)
 
-    distributed_test_function = K.Function(
+    distributed_test_function = K.function(
         all_inputs, all_outputs,
         updates=all_updates,
         name='distributed_test_function',
@@ -469,7 +469,7 @@ def test_loop(model, iterator, verbose=0, steps=None):
     # placeholders that are created with default values.
     sample_weights = [None for _ in range(
         len(model.outputs) * current_strategy.num_replicas_in_sync)]
-    if model.uses_learning_phase and not isinstance(K.learning_phase(), int):
+    if not isinstance(K.learning_phase(), int):
       ins = dataset_inputs + dataset_targets + sample_weights + [0]
     else:
       ins = dataset_inputs + dataset_targets
@@ -563,7 +563,7 @@ def _experimental_test_loop(model, iterator, verbose=0, steps=None,
          current_strategy, grouped_inputs, grouped_outputs, grouped_updates,
          grouped_session_args)
 
-    combined_fn = K.Function(
+    combined_fn = K.function(
         all_inputs, all_outputs,
         updates=all_updates,
         name='distributed_test_function',
@@ -671,13 +671,13 @@ def predict_loop(model, iterator, verbose=0, steps=None):
     dataset_inputs = distributed_training_utils.flatten_perdevice_values(
         current_strategy, inputs)
 
-    distributed_predict_function = K.Function(
+    distributed_predict_function = K.function(
         all_inputs, all_outputs,
         updates=all_updates,
         name='distributed_predict_function',
         **all_session_args)
 
-    if model.uses_learning_phase and not isinstance(K.learning_phase(), int):
+    if not isinstance(K.learning_phase(), int):
       ins = dataset_inputs + [0]
     else:
       ins = dataset_inputs
@@ -772,7 +772,7 @@ def _experimental_predict_loop(model, iterator, verbose=0, steps=None):
          current_strategy, grouped_inputs, grouped_outputs, grouped_updates,
          grouped_session_args)
 
-    combined_fn = K.Function(
+    combined_fn = K.function(
         all_inputs, all_outputs,
         updates=all_updates,
         name='distributed_predict_function',

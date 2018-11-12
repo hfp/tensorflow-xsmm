@@ -75,13 +75,13 @@ TENSORFLOW_API_INIT_FILES = [
     "strings/__init__.py",
     "saved_model/__init__.py",
     "sets/__init__.py",
+    "signal/__init__.py",
     "sparse/__init__.py",
     "spectral/__init__.py",
     "summary/__init__.py",
     "sysconfig/__init__.py",
     "test/__init__.py",
     "train/__init__.py",
-    "user_ops/__init__.py",
     "version/__init__.py",
     # END GENERATED FILES
 ]
