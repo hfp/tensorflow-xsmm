@@ -134,7 +134,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "eigen_archive",
         build_file = clean_dep("//third_party:eigen.BUILD"),
-        sha256 = "b594d7de07791a0f5c0ada59d1ae2c2595fe3e36cfea0fabd1502252c09482a1",
+        sha256 = "5000357cf69c089ace97310b534d527d541c9f4b1cbcb6f51dd16f3b74d1bd86",
         strip_prefix = "eigen-54523c8fa4581b7f5aa869463eb23e3613d8ba7f",
         urls = [
             "https://github.com/hfp/eigen/archive/54523c8fa4581b7f5aa869463eb23e3613d8ba7f.zip",
