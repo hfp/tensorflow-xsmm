@@ -21,6 +21,7 @@ from __future__ import print_function
 import threading
 
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.distribute import reduce_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
@@ -70,11 +71,11 @@ class UpdateContext(object):
 
 
 def get_loss_reduction():
-  """Reduce `aggregation` corresponding to the last loss reduction."""
+  """Reduce op corresponding to the last loss reduction."""
   loss_reduction = ops.get_default_graph()._last_loss_reduction  # pylint: disable=protected-access
   if loss_reduction == losses_impl.Reduction.SUM:
-    return variable_scope.VariableAggregation.SUM
-  return variable_scope.VariableAggregation.MEAN
+    return reduce_util.ReduceOp.SUM
+  return reduce_util.ReduceOp.MEAN
 
 
 # ------------------------------------------------------------------------------
@@ -513,7 +514,7 @@ class DistributionStrategy(object):
         # operates on v1 from var1, v2 from var2, and v3 from var3
 
       # `fn` runs on every device `v1` is on, `v2` and `v3` will be there too.
-      distribution_strategy.update(v1, fn, v2, v3)
+      distribution_strategy.update(v1, fn, args=(v2, v3))
     ```
 
     Args:
@@ -755,9 +756,13 @@ class DistributionStrategy(object):
     """Combine (via e.g. sum or mean) values across replicas.
 
     Args:
-      aggregation: Indicates how a variable will be aggregated. Accepted values
-        are `tf.VariableAggregation.SUM`, `tf.VariableAggregation.MEAN`,
+      aggregation: Reduction type, an instance of `tf.distribute.ReduceOp` enum.
+        DEPRECATED but still accepted values:
+        `tf.VariableAggregation.SUM`,
+        `tf.VariableAggregation.MEAN`,
         `tf.VariableAggregation.ONLY_FIRST_REPLICA`.
+        # TODO(priyag): Rename this argument when moving the method to
+        # DSExtended.
       value: A per-replica value with one value per replica.
       destinations: A mirrored variable, a per-replica tensor, a device string,
         or list of device strings. The return value will be copied to all
@@ -771,23 +776,32 @@ class DistributionStrategy(object):
     # TODO(josh11b): Return an unwrapped value if colocate_with is a
     # single device.
     _require_cross_replica_context(self)
-    assert aggregation in [
-        variable_scope.VariableAggregation.SUM,
-        variable_scope.VariableAggregation.MEAN,
-        variable_scope.VariableAggregation.ONLY_FIRST_REPLICA
-    ]
-    return self._reduce(aggregation, value, destinations)
 
-  def _reduce(self, aggregation, value, destinations):
+    # TODO(priyag): Remove this when all callers have been updated.
+    reduce_op = aggregation
+    if isinstance(aggregation, variable_scope.VariableAggregation):
+      assert aggregation in [
+          variable_scope.VariableAggregation.SUM,
+          variable_scope.VariableAggregation.MEAN,
+          variable_scope.VariableAggregation.ONLY_FIRST_REPLICA
+      ]
+      reduce_op = reduce_util.ReduceOp.from_variable_aggregation(aggregation)
+    return self._reduce(reduce_op, value, destinations)
+
+  def _reduce(self, reduce_op, value, destinations):
     raise NotImplementedError("must be implemented in descendants")
 
   def batch_reduce(self, aggregation, value_destination_pairs):
     """Combine multiple `reduce` calls into one for faster execution.
 
     Args:
-      aggregation: Indicates how a variable will be aggregated. Accepted values
-        are `tf.VariableAggregation.SUM`, `tf.VariableAggregation.MEAN`,
+      aggregation: Reduction type, an instance of `tf.distribute.ReduceOp` enum.
+        DEPRECATED but still accepted values:
+        `tf.VariableAggregation.SUM`,
+        `tf.VariableAggregation.MEAN`,
         `tf.VariableAggregation.ONLY_FIRST_REPLICA`.
+        # TODO(priyag): Rename this argument when moving the method to
+        # DSExtended.
       value_destination_pairs: A sequence of (value, destinations)
         pairs. See `reduce()` for a description.
 
@@ -796,16 +810,21 @@ class DistributionStrategy(object):
     """
     # TODO(josh11b): More docstring
     _require_cross_replica_context(self)
-    assert aggregation in [
-        variable_scope.VariableAggregation.SUM,
-        variable_scope.VariableAggregation.MEAN,
-        variable_scope.VariableAggregation.ONLY_FIRST_REPLICA
-    ]
-    return self._batch_reduce(aggregation, value_destination_pairs)
 
-  def _batch_reduce(self, aggregation, value_destination_pairs):
+    # TODO(priyag): Remove this when all callers have been updated.
+    reduce_op = aggregation
+    if isinstance(aggregation, variable_scope.VariableAggregation):
+      assert aggregation in [
+          variable_scope.VariableAggregation.SUM,
+          variable_scope.VariableAggregation.MEAN,
+          variable_scope.VariableAggregation.ONLY_FIRST_REPLICA
+      ]
+      reduce_op = reduce_util.ReduceOp.from_variable_aggregation(aggregation)
+    return self._batch_reduce(reduce_op, value_destination_pairs)
+
+  def _batch_reduce(self, reduce_op, value_destination_pairs):
     return [
-        self.reduce(aggregation, t, destinations=v)
+        self.reduce(reduce_op, t, destinations=v)
         for t, v in value_destination_pairs
     ]
 
@@ -819,7 +838,7 @@ class DistributionStrategy(object):
     results = {}
     for device, v in var:
       with tf.device(device):
-        # *args and **kwargs will be unwrapped if they are mirrored.
+        # args and kwargs will be unwrapped if they are mirrored.
         results[device] = fn(v, *args, **kwargs)
     return merged(results)
     ```
@@ -833,23 +852,41 @@ class DistributionStrategy(object):
     Args:
       var: Variable, possibly mirrored to multiple devices, to operate on.
       fn: Function to call. Should take the variable as the first argument.
-      *args: Additional positional arguments to pass to `fn()`.
-      **kwargs: Keyword arguments to pass to `fn()`. If "grouped=False" is
-        specified, the return value will be unwrapped.
+      args: Tuple or list. Additional positional arguments to pass to `fn()`.
+      kwargs: Dict with keyword arguments to pass to `fn()`.
+      group: Boolean. Defaults to True. If False, the return value will be
+        unwrapped.
 
     Returns:
       By default, the merged return value of `fn` across all replicas.  The
       merged result has dependencies to make sure that if it is evaluated at
       all, the side effects (updates) will happen on every replica. If instead
-      "grouped=False" is specified, this function will return a nest of lists
+      "group=False" is specified, this function will return a nest of lists
       where each list has an element per replica, and the caller is responsible
       for ensuring all elements are executed.
     """
     _require_cross_replica_context(self)
-    options = {"grouped": kwargs.pop("grouped", True)}
-    return self._update(var, options, fn, *args, **kwargs)
+    group = kwargs.pop("group", True)
+    # We temporarily support "grouped" in addition to "group" for backward-
+    # compatibility.
+    group = kwargs.pop("grouped", True) and group
+    # Handle old *args, **kwargs, and new args=(...), kwargs={...}, to
+    # allow transition.
+    a = kwargs.pop("args", None)
+    if a is not None:
+      if args:
+        raise ValueError(
+            "Can't pass *args and args=... to update")
+      args = a
+    k = kwargs.pop("kwargs", None)
+    if k is not None:
+      if kwargs:
+        raise ValueError(
+            "Can't pass **kwargs and kwargs=... to update")
+      kwargs = k
+    return self._update(var, fn, args, kwargs, group)
 
-  def _update(self, var, options, fn, *args, **kwargs):
+  def _update(self, var, fn, args, kwargs, group):
     raise NotImplementedError("must be implemented in descendants")
 
   def update_non_slot(self, colocate_with, fn, *args, **kwargs):
@@ -858,19 +895,36 @@ class DistributionStrategy(object):
     Args:
       colocate_with: The return value of `non_slot_devices()`.
       fn: Function to execute.
-      *args: Positional arguments to pass to `fn()`.
-      **kwargs: Keyword arguments to pass to `fn()`. If "grouped=False" is
-        specified, the return value will be unwrapped and the caller is
-        responsible for ensuring all elements are executed.
+      args: Tuple or list. Positional arguments to pass to `fn()`.
+      kwargs: Dict with keyword arguments to pass to `fn()`.
+      group: Boolean. Defaults to True. If False, the return value will be
+        unwrapped.
 
     Returns:
       Return value of `fn`, possibly merged across devices.
     """
     _require_cross_replica_context(self)
-    options = {"grouped": kwargs.pop("grouped", True)}
-    return self._update_non_slot(colocate_with, options, fn, *args, **kwargs)
+    group = kwargs.pop("group", True)
+    # We temporarily support "grouped" in addition to "group" for backward-
+    # compatibility.
+    group = kwargs.pop("grouped", True) and group
+    # Handle old *args, **kwargs, and new args=(...), kwargs={...}, to
+    # allow transition.
+    a = kwargs.pop("args", None)
+    if a is not None:
+      if args:
+        raise ValueError(
+            "Can't pass *args and args=... to update_non_slot")
+      args = a
+    k = kwargs.pop("kwargs", None)
+    if k is not None:
+      if kwargs:
+        raise ValueError(
+            "Can't pass **kwargs and kwargs=... to update_non_slot")
+      kwargs = k
+    return self._update_non_slot(colocate_with, fn, args, kwargs, group)
 
-  def _update_non_slot(self, colocate_with, options, fn, *args, **kwargs):
+  def _update_non_slot(self, colocate_with, fn, args, kwargs, group):
     raise NotImplementedError("must be implemented in descendants")
 
   def unwrap(self, value):
@@ -1074,11 +1128,6 @@ class ReplicaContext(object):
       _pop_per_thread_mode()
 
   @property
-  def num_replicas(self):
-    """Returns number of replicas, for purposes of averaging across replicas."""
-    return self._distribution_strategy.num_replicas
-
-  @property
   def num_replicas_in_sync(self):
     """Returns number of replicas over which gradients are aggregated."""
     return self._distribution_strategy.num_replicas_in_sync
@@ -1154,19 +1203,17 @@ class _DefaultDistributionStrategy(DistributionStrategy):
     with ReplicaContext(self, replica_id=0):
       return fn(*args, **kwargs)
 
-  def _reduce(self, aggregation, value, destinations):
+  def _reduce(self, reduce_op, value, destinations):
     # TODO(josh11b): Use destinations?
-    del aggregation, destinations
+    del reduce_op, destinations
     return value
 
-  def _update(self, var, options, fn, *args, **kwargs):
+  def _update(self, var, fn, args, kwargs, group):
     # The implementations of _update() and _update_non_slot() are identical
     # except _update() passes `var` as the first argument to `fn()`.
-    return self._update_non_slot(var, options, fn, var, *args, **kwargs)
+    return self._update_non_slot(var, fn, (var,) + tuple(args), kwargs, group)
 
-  def _update_non_slot(self, colocate_with, options, fn, *args, **kwargs):
-    should_group = options.pop("grouped")
-    assert not options  # Validate that we are processing all of the options.
+  def _update_non_slot(self, colocate_with, fn, args, kwargs, should_group):
     # TODO(josh11b): Figure out what we should be passing to UpdateContext()
     # once that value is used for something.
     with ops.colocate_with(colocate_with), UpdateContext(colocate_with):
@@ -1184,10 +1231,6 @@ class _DefaultDistributionStrategy(DistributionStrategy):
 
   def value_container(self, value):
     return value
-
-  @property
-  def num_replicas(self):
-    return 1
 
   @property
   def num_replicas_in_sync(self):
