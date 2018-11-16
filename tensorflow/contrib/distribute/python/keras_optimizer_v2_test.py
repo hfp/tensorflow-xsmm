@@ -36,9 +36,10 @@ from tensorflow.python.estimator.canned import dnn_linear_combined
 from tensorflow.python.estimator.canned import prediction_keys
 from tensorflow.python.estimator.export import export
 from tensorflow.python.estimator.inputs import numpy_io
-from tensorflow.python.feature_column import feature_column
+from tensorflow.python.feature_column import feature_column_lib as feature_column
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import adam
 from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.ops import math_ops
@@ -47,7 +48,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import gfile
 from tensorflow.python.platform import test
 from tensorflow.python.summary.writer import writer_cache
-from tensorflow.python.training import distribution_strategy_context
+from tensorflow.python.training import distribution_strategy_context as ds_context
 
 
 class KerasOptimizerV2IntegrationTest(test.TestCase, parameterized.TestCase):
@@ -70,7 +71,9 @@ class KerasOptimizerV2IntegrationTest(test.TestCase, parameterized.TestCase):
           distribution=[
               combinations.one_device_strategy,
               combinations.mirrored_strategy_with_gpu_and_cpu,
-              combinations.mirrored_strategy_with_two_gpus
+              combinations.mirrored_strategy_with_two_gpus,
+              combinations.core_mirrored_strategy_with_gpu_and_cpu,
+              combinations.core_mirrored_strategy_with_two_gpus
           ],
           use_train_and_evaluate=[True, False]))
   def test_complete_flow_with_mode(self, distribution, use_train_and_evaluate):
@@ -272,9 +275,10 @@ class MirroredStrategyOptimizerV2Test(test.TestCase):
 
 
 def _replica_id():
-  # TODO(cjfj): Return `replica_id` directly, once it is a `Tensor`.
-  return constant_op.constant(
-      distribution_strategy_context.get_replica_context().replica_id)
+  replica_id = ds_context.get_replica_context().replica_id_in_sync_group
+  if not isinstance(replica_id, ops.Tensor):
+    replica_id = constant_op.constant(replica_id)
+  return replica_id
 
 
 if __name__ == '__main__':

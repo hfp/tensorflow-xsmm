@@ -300,6 +300,7 @@ filegroup(
         "platform/env_time.h",
         "platform/logging.h",
         "platform/macros.h",
+        "platform/platform_strings.h",
         "platform/types.h",
     ],
     visibility = ["//visibility:private"],
@@ -517,6 +518,19 @@ cc_library(
         ":lib_platform",
         ":platform_env",
     ],
+)
+
+cc_library(
+    name = "platform_strings",
+    srcs = tf_platform_srcs([
+        "platform/platform_strings.cc",
+        "platform/platform_strings_computed.h",
+    ]),
+    hdrs = [
+        "platform/platform_strings.h",
+    ],
+    visibility = ["//tensorflow/core:__subpackages__"],
+    deps = [":lib"],
 )
 
 filegroup(
@@ -3412,12 +3426,6 @@ tf_cc_test(
     ],
 )
 
-cc_library(
-    name = "platform_strings",
-    srcs = ["platform/platform_strings_computed.h"],
-    hdrs = ["platform/platform_strings.h"],
-)
-
 tf_cc_test(
     name = "platform_strings_test",
     size = "small",
@@ -4106,6 +4114,7 @@ tf_cc_test(
         "//tensorflow/core/kernels:identity_op",
         "//tensorflow/core/kernels:immutable_constant_op",
         "//tensorflow/core/kernels:matmul_op",
+        "//tensorflow/core/kernels:topk_op",
         "//third_party/eigen3",
     ],
 )
@@ -4878,6 +4887,7 @@ transitive_hdrs(
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core:platform_strings",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:stream_executor",
     ],

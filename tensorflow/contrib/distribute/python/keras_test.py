@@ -279,6 +279,8 @@ strategies = [combinations.default_strategy,
               combinations.one_device_strategy,
               combinations.mirrored_strategy_with_gpu_and_cpu,
               combinations.mirrored_strategy_with_two_gpus,
+              combinations.core_mirrored_strategy_with_gpu_and_cpu,
+              combinations.core_mirrored_strategy_with_two_gpus,
               combinations.tpu_strategy,  # steps_per_run=2
               combinations.tpu_strategy_one_step]
 
@@ -288,7 +290,9 @@ def strategy_minus_tpu_combinations():
       distribution=[combinations.default_strategy,
                     combinations.one_device_strategy,
                     combinations.mirrored_strategy_with_gpu_and_cpu,
-                    combinations.mirrored_strategy_with_two_gpus],
+                    combinations.mirrored_strategy_with_two_gpus,
+                    combinations.core_mirrored_strategy_with_gpu_and_cpu,
+                    combinations.core_mirrored_strategy_with_two_gpus],
       mode=['graph'])
 
 
@@ -521,7 +525,7 @@ class TestDistributionStrategyWithNumpyArrays(test.TestCase,
       loss = 'mse'
       strategy = mirrored_strategy.MirroredStrategy(['/device:GPU:0',
                                                      '/device:CPU:0'])
-      strategy._require_static_shapes = True
+      strategy.extended._require_static_shapes = True
 
       model.compile(optimizer, loss, distribute=strategy)
       iterator = model._distribution_standardize_user_data(inputs,

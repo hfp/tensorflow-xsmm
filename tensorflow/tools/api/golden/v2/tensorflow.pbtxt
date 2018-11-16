@@ -9,27 +9,11 @@ tf_module {
     mtype: "<class \'google.protobuf.pyext.cpp_message.GeneratedProtocolMessageType\'>"
   }
   member {
-    name: "ConditionalAccumulator"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "ConditionalAccumulatorBase"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "ConfigProto"
     mtype: "<class \'google.protobuf.pyext.cpp_message.GeneratedProtocolMessageType\'>"
   }
   member {
     name: "DType"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "DeviceSpec"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "Dimension"
     mtype: "<type \'type\'>"
   }
   member {
@@ -297,10 +281,6 @@ tf_module {
     mtype: "<type \'module\'>"
   }
   member {
-    name: "logging"
-    mtype: "<type \'module\'>"
-  }
-  member {
     name: "losses"
     mtype: "<type \'module\'>"
   }
@@ -386,10 +366,6 @@ tf_module {
   }
   member {
     name: "sparse"
-    mtype: "<type \'module\'>"
-  }
-  member {
-    name: "spectral"
     mtype: "<type \'module\'>"
   }
   member {
@@ -506,19 +482,19 @@ tf_module {
   }
   member_method {
     name: "assert_equal"
-    argspec: "args=[\'x\', \'y\', \'data\', \'summarize\', \'message\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\', \'None\'], "
+    argspec: "args=[\'x\', \'y\', \'message\', \'summarize\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\'], "
   }
   member_method {
     name: "assert_greater"
-    argspec: "args=[\'x\', \'y\', \'data\', \'summarize\', \'message\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\', \'None\'], "
+    argspec: "args=[\'x\', \'y\', \'message\', \'summarize\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\'], "
   }
   member_method {
     name: "assert_less"
-    argspec: "args=[\'x\', \'y\', \'data\', \'summarize\', \'message\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\', \'None\'], "
+    argspec: "args=[\'x\', \'y\', \'message\', \'summarize\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\'], "
   }
   member_method {
     name: "assert_rank"
-    argspec: "args=[\'x\', \'rank\', \'data\', \'summarize\', \'message\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\', \'None\'], "
+    argspec: "args=[\'x\', \'rank\', \'message\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'None\'], "
   }
   member_method {
     name: "atan"
@@ -801,10 +777,6 @@ tf_module {
     argspec: "args=[\'start\', \'stop\', \'num\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
-    name: "load_file_system_library"
-    argspec: "args=[\'library_filename\'], varargs=None, keywords=None, defaults=None"
-  }
-  member_method {
     name: "load_library"
     argspec: "args=[\'library_location\'], varargs=None, keywords=None, defaults=None"
   }
@@ -933,10 +905,6 @@ tf_module {
     argspec: "args=[\'func\', \'inp\', \'Tout\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
-    name: "quantize_v2"
-    argspec: "args=[\'input\', \'min_range\', \'max_range\', \'T\', \'mode\', \'name\', \'round_mode\'], varargs=None, keywords=None, defaults=[\'MIN_COMBINED\', \'None\', \'HALF_AWAY_FROM_ZERO\'], "
-  }
-  member_method {
     name: "range"
     argspec: "args=[\'start\', \'limit\', \'delta\', \'dtype\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \'1\', \'None\', \'range\'], "
   }
@@ -1053,12 +1021,8 @@ tf_module {
     argspec: "args=[\'lengths\', \'maxlen\', \'dtype\', \'name\'], varargs=None, keywords=None, defaults=[\'None\', \"<dtype: \'bool\'>\", \'None\'], "
   }
   member_method {
-    name: "set_random_seed"
-    argspec: "args=[\'seed\'], varargs=None, keywords=None, defaults=None"
-  }
-  member_method {
     name: "shape"
-    argspec: "args=[\'input\', \'name\', \'out_type\'], varargs=None, keywords=None, defaults=[\'None\', \"<dtype: \'int32\'>\"], "
+    argspec: "args=[\'input\', \'out_type\', \'name\'], varargs=None, keywords=None, defaults=[\"<dtype: \'int32\'>\", \'None\'], "
   }
   member_method {
     name: "shape_n"
@@ -1082,7 +1046,7 @@ tf_module {
   }
   member_method {
     name: "size"
-    argspec: "args=[\'input\', \'name\', \'out_type\'], varargs=None, keywords=None, defaults=[\'None\', \"<dtype: \'int32\'>\"], "
+    argspec: "args=[\'input\', \'out_type\', \'name\'], varargs=None, keywords=None, defaults=[\"<dtype: \'int32\'>\", \'None\'], "
   }
   member_method {
     name: "slice"
@@ -1094,7 +1058,7 @@ tf_module {
   }
   member_method {
     name: "sparse_concat"
-    argspec: "args=[\'axis\', \'sp_inputs\', \'name\', \'expand_nonconcat_dim\', \'concat_dim\'], varargs=None, keywords=None, defaults=[\'None\', \'False\', \'None\'], "
+    argspec: "args=[\'axis\', \'sp_inputs\', \'expand_nonconcat_dim\', \'concat_dim\', \'name\'], varargs=None, keywords=None, defaults=[\'False\', \'None\', \'None\'], "
   }
   member_method {
     name: "sparse_to_dense"

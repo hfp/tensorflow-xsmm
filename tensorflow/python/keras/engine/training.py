@@ -802,8 +802,6 @@ class Model(Network):
       inputs = (self._feed_inputs +
                 self._feed_targets +
                 self._feed_sample_weights)
-      if not isinstance(K.symbolic_learning_phase(), int):
-        inputs += [K.symbolic_learning_phase()]
 
       with K.name_scope('evaluation'):
         updates = self.state_updates
@@ -832,10 +830,7 @@ class Model(Network):
     if not hasattr(self, 'predict_function'):
       self.predict_function = None
     if self.predict_function is None:
-      if not isinstance(K.symbolic_learning_phase(), int):
-        inputs = self._feed_inputs + [K.symbolic_learning_phase()]
-      else:
-        inputs = self._feed_inputs
+      inputs = self._feed_inputs
       # Gets network outputs. Does not update weights.
       # Does update the network states.
       kwargs = getattr(self, '_function_kwargs', {})
@@ -971,13 +966,13 @@ class Model(Network):
         x = x.batch(batch_size, drop_remainder=drop_remainder)
 
     assert isinstance(x, dataset_ops.Dataset)
-    if self._distribution_strategy.__class__.__name__ == 'TPUStrategy':
-      iterator = self._distribution_strategy.make_dataset_iterator(x)
-    else:
-      dataset = self._distribution_strategy.distribute_dataset(lambda: x)
-      iterator = dataset.make_initializable_iterator()
 
     with self._distribution_strategy.scope():
+      if type(self._distribution_strategy).__name__ == 'TPUStrategy':
+        iterator = self._distribution_strategy.make_dataset_iterator(x)
+      else:
+        dataset = self._distribution_strategy.distribute_dataset(lambda: x)
+        iterator = dataset.make_initializable_iterator()
       K.get_session().run(iterator.initializer)
 
     training_utils.validate_iterator_input(x, y, sample_weight,
@@ -1284,7 +1279,9 @@ class Model(Network):
       y = training_utils.standardize_input_data(
           y,
           feed_output_names,
-          feed_output_shapes,
+          # Don't enforce target shapes to match output shapes.
+          # Precise checks will be run in `check_loss_and_target_compatibility`.
+          shapes=None,
           check_batch_axis=False,  # Don't enforce the batch size.
           exception_prefix='target')
 
@@ -2047,12 +2044,9 @@ class Model(Network):
       outputs = training_eager.test_on_batch(
           self, x, y, sample_weights=sample_weights)
     else:
-      if not isinstance(K.symbolic_learning_phase(), int):
-        ins = x + y + sample_weights + [False]
-      else:
-        ins = x + y + sample_weights
+      inputs = x + y + sample_weights
       self._make_test_function()
-      outputs = self.test_function(ins)  # pylint: disable=not-callable
+      outputs = self.test_function(inputs)  # pylint: disable=not-callable
 
     if len(outputs) == 1:
       return outputs[0]
@@ -2091,13 +2085,8 @@ class Model(Network):
         ]
       return self(inputs)  # pylint: disable=not-callable
 
-    if not isinstance(K.symbolic_learning_phase(), int):
-      ins = inputs + [False]
-    else:
-      ins = inputs
-
     self._make_predict_function()
-    outputs = self.predict_function(ins)
+    outputs = self.predict_function(inputs)
 
     if len(outputs) == 1:
       return outputs[0]

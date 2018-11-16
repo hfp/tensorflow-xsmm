@@ -318,6 +318,14 @@ class DistributedVariable(DistributedDelegate):
 ops.register_dense_tensor_like_type(DistributedVariable)
 
 
+def _apply_aggregation(strategy, value, aggregation, destinations):
+  if aggregation == vs.VariableAggregation.ONLY_FIRST_REPLICA:
+    return strategy.broadcast(strategy.unwrap(value)[0],
+                              destinations=destinations)
+  reduce_op = reduce_util.ReduceOp.from_variable_aggregation(aggregation)
+  return strategy.reduce(reduce_op, value=value, destinations=destinations)
+
+
 class _MirroredSaveable(saver.BaseSaverBuilder.ResourceVariableSaveable):
   """Class for defining how to restore a MirroredVariable."""
 
@@ -373,14 +381,10 @@ class MirroredVariable(DistributedVariable, Mirrored,
       if self._aggregation == vs.VariableAggregation.NONE:
         raise ValueError("You must specify an aggregation method to update a "
                          "MirroredVariable in Replica Context.")
-      reduce_op = reduce_util.ReduceOp.from_variable_aggregation(
-          self._aggregation)
 
       def merge_fn(strategy, value, *other_args, **other_kwargs):
-        return strategy.update(
-            self, f,
-            strategy.reduce(reduce_op, value=value, destinations=self),
-            *other_args, **other_kwargs)
+        v = _apply_aggregation(strategy, value, self._aggregation, self)
+        return strategy.update(self, f, v, *other_args, **other_kwargs)
 
       return distribution_strategy_context.get_replica_context().merge_call(
           merge_fn, *args, **kwargs)
@@ -615,14 +619,10 @@ class TPUMirroredVariable(checkpointable.CheckpointableBase):
       if self._aggregation == vs.VariableAggregation.NONE:
         raise ValueError("You must specify an aggregation method to update a "
                          "TPUMirroredVariable in Replica Context.")
-      reduce_op = reduce_util.ReduceOp.from_variable_aggregation(
-          self._aggregation)
 
       def merge_fn(strategy, value, *other_args, **other_kwargs):
-        return strategy.update(
-            self, f,
-            strategy.reduce(reduce_op, value=value, destinations=self),
-            *other_args, **other_kwargs)
+        v = _apply_aggregation(strategy, value, self._aggregation, self)
+        return strategy.update(self, f, v, *other_args, **other_kwargs)
 
       return distribution_strategy_context.get_replica_context().merge_call(
           merge_fn, *args, **kwargs)
@@ -1062,18 +1062,18 @@ def select_device_mirrored(device, structured):
   return nest.map_structure(_get_mirrored, structured)
 
 
-def update_regroup(strategy, updates, group):
+def update_regroup(extended, updates, group):
   """Regroup for an update, with dependencies to ensure all updates execute."""
   regrouped = regroup(updates, Mirrored)
   if not group:
-    return nest.map_structure(strategy.unwrap, regrouped)
+    return nest.map_structure(extended._unwrap, regrouped)  # pylint: disable=protected-access
   grouped_flat = []
   for u in nest.flatten(regrouped):
     if isinstance(u, DistributedValues):
-      g = strategy.group(u)
+      g = extended._group(u)  # pylint: disable=protected-access
       if u.is_tensor_like:
         # Make sure we run all updates. Without this, something like
-        # session.run(strategy.update(...)) may only update one replica.
+        # session.run(extended.update(...)) may only update one replica.
         index = {}
         for d in u.devices:
           with ops.device(d), ops.control_dependencies([g]):
@@ -1256,22 +1256,34 @@ class MultiWorkerDataset(object):
     """Initialize the MultiWorkerDataset object.
 
     Args:
-      dataset_fn: a function that returns a `tf.data.Dataset`.
+      dataset_fn: a function or a list of functions that returns a
+        `tf.data.Dataset`.
       worker_device_pairs: a list of (worker, list of devices on that worker)
-        pairs.
+        pairs; it must have same length with `dataset_fn` if `dataset_fn` is a
+        list.
       prefetch_on_device: whether to prefetch to devices.
       auto_shard: whether to auto-shard the dataset.
     """
+    if isinstance(dataset_fn, list):
+      if len(dataset_fn) != len(worker_device_pairs):
+        raise ValueError("If `dataset_fn` is a list, it must have same length "
+                         "as `worker_device_pairs`")
+      if auto_shard:
+        raise ValueError(
+            "If `dataset_fn` is a list, `auto_shard` is not supported.")
     self._worker_device_pairs = worker_device_pairs
     self._datasets = []
     # TODO(yuefengz, priyag): support different set of jobs for input
     # processing.
     for i, (worker, worker_devices) in enumerate(worker_device_pairs):
       with ops.device(worker):
-        worker_input = dataset_fn()
-        if auto_shard:
-          worker_input = input_ops.auto_shard_dataset(
-              worker_input, len(worker_device_pairs), i)
+        if isinstance(dataset_fn, list):
+          worker_input = dataset_fn[i]()
+        else:
+          worker_input = dataset_fn()
+          if auto_shard:
+            worker_input = input_ops.auto_shard_dataset(
+                worker_input, len(worker_device_pairs), i)
         dataset = PerReplicaDataset(
             worker_input, worker_devices, prefetch_on_device=prefetch_on_device)
         self._datasets.append((worker, dataset))
@@ -1650,14 +1662,10 @@ class AggregatingVariable(checkpointable.CheckpointableBase):
       if self._aggregation == vs.VariableAggregation.NONE:
         raise ValueError("You must specify an aggregation method to update a "
                          "a variable in Replica Context.")
-      reduce_op = reduce_util.ReduceOp.from_variable_aggregation(
-          self._aggregation)
 
       def merge_fn(strategy, value, *other_args, **other_kwargs):
-        return strategy.update(
-            self, f,
-            strategy.reduce(reduce_op, value=value, destinations=self),
-            *other_args, **other_kwargs)
+        v = _apply_aggregation(strategy, value, self._aggregation, self)
+        return strategy.update(self, f, v, *other_args, **other_kwargs)
 
       return distribution_strategy_context.get_replica_context().merge_call(
           merge_fn, *args, **kwargs)

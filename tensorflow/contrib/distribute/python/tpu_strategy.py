@@ -35,6 +35,7 @@ from tensorflow.python.distribute import reduce_util
 from tensorflow.python.eager import context
 from tensorflow.python.eager import tape
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import array_ops
@@ -133,8 +134,21 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
       num_cores: Number of cores to use on the TPU. If None specified, then
           auto-detect the cores and topology of the TPU system.
     """
-    super(TPUStrategy, self).__init__()
+    super(TPUStrategy, self).__init__(TPUExtended(
+        self, tpu_cluster_resolver, steps_per_run, num_cores))
 
+  @property
+  def steps_per_run(self):
+    """DEPRECATED: use .extended.steps_per_run instead."""
+    return self._extended.steps_per_run
+
+
+class TPUExtended(distribute_lib.DistributionStrategyExtended):
+  """Implementation of TPUStrategy."""
+
+  def __init__(self, container_strategy, tpu_cluster_resolver, steps_per_run,
+               num_cores=None):
+    super(TPUExtended, self).__init__(container_strategy)
     self._tpu_cluster_resolver = tpu_cluster_resolver
     self._tpu_metadata = get_tpu_system_metadata(self._tpu_cluster_resolver)
     # TODO(sourabhbajaj): Change this from num_cores to metadata_override
@@ -148,7 +162,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     self._host_device = self.get_host_cpu_device(0)
     self._tpu_devices = sorted(device_map.keys())
     # Only create variables for the number of replicas we're running.
-    self._tpu_devices = self._tpu_devices[:self.num_replicas_in_sync]
+    self._tpu_devices = self._tpu_devices[:self._num_replicas_in_sync]
 
     # TODO(sourabhbajaj): Remove this once performance of running one step
     # at a time is comparable to multiple steps.
@@ -217,7 +231,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
 
     return enqueue_op_per_host
 
-  def make_dataset_iterator(self, dataset):
+  def _make_dataset_iterator(self, dataset):
     """Make iterators for each of the TPU hosts.
 
     We first unbatch the users input dataset and then rebatch it with the
@@ -254,11 +268,11 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
           "The batch operations can be followed by a prefetch.")
 
     global_batch_size = _get_dataset_batch_size(dataset)
-    if global_batch_size % self.num_replicas_in_sync:
+    if global_batch_size % self._num_replicas_in_sync:
       raise ValueError(
           "Batch size %s cannot be sharded evenly across replicas %s" % (
               global_batch_size, self.num_replicas_in_sync))
-    per_replica_batch_size = global_batch_size // self.num_replicas_in_sync
+    per_replica_batch_size = global_batch_size // self._num_replicas_in_sync
     dataset = dataset.apply(batching.unbatch())
     dataset = dataset.batch(per_replica_batch_size, drop_remainder=True)
 
@@ -272,7 +286,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     # TODO(priyag): Return distribution strategy specific InputIterator
     return distributed_dataset.make_initializable_iterator()
 
-  def distribute_dataset(self, dataset_fn):
+  def _distribute_dataset(self, dataset_fn):
     worker_devices = [
         (self.get_host(hid), [self.get_host_cpu_device(hid)])
         for hid in range(self.num_hosts)
@@ -283,9 +297,8 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
   # TODO(priyag): Deal with OutOfRange errors once b/111349762 is fixed.
   # TODO(sourabhbajaj): Remove the initial_loop_values parameter when we have
   # a mechanism to infer the outputs of `fn`. Pending b/110550782.
-  def _run_steps_on_dataset(self, fn, multi_worker_iterator, iterations,
-                            initial_loop_values=None):
-
+  def _experimental_run_steps_on_iterator(
+      self, fn, multi_worker_iterator, iterations, initial_loop_values=None):
     output_shapes = multi_worker_iterator.output_shapes
     shapes = nest.flatten(output_shapes)
     if any([not s.is_fully_defined() for s in shapes]):
@@ -337,7 +350,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     self._outer_control_flow_context = (
         ops.get_default_graph()._get_control_flow_context())  # pylint: disable=protected-access
 
-    replicate_inputs = [[]] * self.num_replicas_in_sync
+    replicate_inputs = [[]] * self._num_replicas_in_sync
     replicate_outputs = tpu.replicate(iterate_on_tpu, replicate_inputs)
     del self._outer_control_flow_context
     ctx.run_op = control_flow_ops.group(replicate_outputs, enqueue_ops)
@@ -378,10 +391,10 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
   def _call_for_each_replica(self, fn, args, kwargs):
     # TODO(jhseu): Consider making it so call_for_each_replica implies that
     # we're in a tpu.rewrite(), and update TPUMirroredVariable accordingly.
-    with _TPUReplicaContext(self):
+    with _TPUReplicaContext(self._container_strategy()):
       return fn(*args, **kwargs)
 
-  def initialize(self):
+  def _initialize(self):
     if context.executing_eagerly():
       # TODO(priyag): Add appopriate call here when eager is supported for TPUs.
       raise NotImplementedError("Eager mode not supported in TPUStrategy.")
@@ -396,7 +409,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
                               tpu.initialize_system())
       return graph.get_collection(_TPU_INITIALIZE_SYSTEM_COLLECTION)
 
-  def finalize(self):
+  def _finalize(self):
     if context.executing_eagerly():
       # TODO(priyag): Add appopriate call here when eager is supported for TPUs.
       raise NotImplementedError("Eager mode not supported in TPUStrategy.")
@@ -404,7 +417,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
       return [tpu.shutdown_system()]
 
   def _get_devices_from(self, colocate_with=None):
-     # TODO(jhseu): Change this when we support model parallelism.
+    # TODO(jhseu): Change this when we support model parallelism.
     return self._tpu_devices
 
   def _create_variable(self, next_creator, *args, **kwargs):
@@ -441,11 +454,11 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     return _create_tpu_mirrored_variable(devices, _real_mirrored_creator, *args,
                                          **kwargs)
 
-  def _reduce(self, reduce_op, value, destinations):
+  def _reduce_to(self, reduce_op, value, destinations):
     if values._enclosing_tpu_context() is not None:  # pylint: disable=protected-access
       if reduce_op == reduce_util.ReduceOp.MEAN:
         # TODO(jhseu):  Revisit once we support model-parallelism.
-        value *= (1. / self.num_replicas_in_sync)
+        value *= (1. / self._num_replicas_in_sync)
       elif reduce_op != reduce_util.ReduceOp.SUM:
         raise NotImplementedError(
             "Currently only support sum & mean in TPUStrategy.")
@@ -461,8 +474,6 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     else:
       raise ValueError("Multiple devices are not supported for TPUStrategy")
 
-    if reduce_op == reduce_util.ReduceOp.ONLY_FIRST_REPLICA:
-      return value[0]
     output = math_ops.add_n(value)
     if reduce_op == reduce_util.ReduceOp.MEAN:
       return output * (1. / len(value))
@@ -506,7 +517,7 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
   def value_container(self, value):
     return value
 
-  def _broadcast(self, tensor, destinations):
+  def _broadcast_to(self, tensor, destinations):
     del destinations
     return tensor
 
@@ -519,15 +530,15 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
     return self._tpu_metadata.num_of_cores_per_host
 
   @property
-  def num_replicas_in_sync(self):
+  def _num_replicas_in_sync(self):
     return self._num_cores_override or self._tpu_metadata.num_cores
 
   @property
-  def between_graph(self):
+  def experimental_between_graph(self):
     return False
 
   @property
-  def should_init(self):
+  def experimental_should_init(self):
     return True
 
   @property
@@ -568,11 +579,11 @@ class TPUStrategy(distribute_lib.DistributionStrategy):
   def get_host_cpu_device(self, host_id):
     return self.get_host(host_id) + "/device:CPU:0"
 
-  def configure(self,
-                session_config=None,
-                cluster_spec=None,
-                task_type=None,
-                task_id=None):
+  def _configure(self,
+                 session_config=None,
+                 cluster_spec=None,
+                 task_type=None,
+                 task_id=None):
     del cluster_spec, task_type, task_id
     if session_config:
       session_config.isolate_session_state = True
@@ -587,7 +598,10 @@ class _TPUReplicaContext(distribute_lib.ReplicaContext):
   # TODO(sourabhbajaj): Call for each tower should be updating this.
   def __init__(self, distribution_strategy):
     distribute_lib.ReplicaContext.__init__(
-        self, distribution_strategy, replica_id=0)
+        self,
+        distribution_strategy,
+        # TODO(b/118385803): properly initialize replica_id, instead of always 0
+        replica_id_in_sync_group=constant_op.constant(0, dtypes.int32))
 
   @property
   def device(self):
@@ -596,4 +610,6 @@ class _TPUReplicaContext(distribute_lib.ReplicaContext):
   @property
   def devices(self):
     distribute_lib.require_replica_context(self)
-    return [self._distribution_strategy.worker_devices[self._replica_id]]
+    ds = self._distribution_strategy
+    replica_id = tensor_util.constant_value(self._replica_id_in_sync_group)
+    return [ds.worker_devices[replica_id]]
