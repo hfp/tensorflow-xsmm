@@ -3161,8 +3161,12 @@ class EagerExecutionFunction(object):
         if value is None:
           raise ValueError(
               'You must feed a value for placeholder %s' % (tensor,))
-      converted_inputs.append(
-          ops.convert_to_tensor(value, dtype=tensor.dtype))
+      value = ops.convert_to_tensor(value, dtype=tensor.dtype)
+      if value.dtype != tensor.dtype:
+        # Temporary workaround due to `convert_to_tensor` not casting floats.
+        # See b/119637405
+        value = math_ops.cast(value, tensor.dtype)
+      converted_inputs.append(value)
     outputs = self._graph_fn(*converted_inputs)
     return [x.numpy() for x in outputs]
 
@@ -3680,13 +3684,13 @@ def in_train_phase(x, alt, training=None):
   if training is None:
     training = learning_phase()
 
-  if training is 1 or training is True:
+  if training == 1 or training is True:
     if callable(x):
       return x()
     else:
       return x
 
-  elif training is 0 or training is False:
+  elif training == 0 or training is False:
     if callable(alt):
       return alt()
     else:

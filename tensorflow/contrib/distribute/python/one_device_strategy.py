@@ -20,7 +20,7 @@ from __future__ import print_function
 
 import six
 
-from tensorflow.contrib.distribute.python import values
+from tensorflow.python.distribute import values
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -67,9 +67,8 @@ class OneDeviceExtended(distribute_lib.DistributionStrategyExtended):
       return next_creator(*args, **kwargs)
 
   def _make_dataset_iterator(self, dataset):
-    distributed_dataset = values.PerReplicaDataset(dataset, [self._device])
-    # TODO(priyag): Return distribution strategy specific InputIterator
-    return distributed_dataset.make_initializable_iterator()
+    """Make iterator from dataset without splitting the batch."""
+    return values.DatasetIterator(dataset, [("/job:localhost", [self._device])])
 
   def _distribute_dataset(self, dataset_fn):
     return values.PerReplicaDataset(
@@ -79,9 +78,9 @@ class OneDeviceExtended(distribute_lib.DistributionStrategyExtended):
       self,
       input_fn,
       replication_mode=distribute_lib.InputReplicationMode.PER_WORKER):
-    return values.PerReplicaDataset(
-        self._call_dataset_fn(input_fn, distribute_lib.InputContext()),
-        [self._device])
+    return values.InputFunctionIterator(
+        input_fn, [("/job:localhost", [self._device])],
+        [distribute_lib.InputContext()])
 
   def _broadcast_to(self, tensor, destinations):
     del destinations
@@ -101,7 +100,7 @@ class OneDeviceExtended(distribute_lib.DistributionStrategyExtended):
       fn_inputs = iterator.get_next()
       if not isinstance(fn_inputs, tuple):
         fn_inputs = (fn_inputs,)
-      fn_result = fn(ctx, *fn_inputs)
+      fn_result = fn(ctx, fn_inputs)
       flat_last_step_outputs = nest.flatten(ctx.last_step_outputs)
       with ops.control_dependencies([fn_result]):
         return [i + 1] + flat_last_step_outputs

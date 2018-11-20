@@ -22,12 +22,12 @@ import contextlib
 from functools import partial
 import threading
 
-from tensorflow.contrib.distribute.python import cross_tower_ops as cross_tower_ops_lib
-from tensorflow.contrib.distribute.python import shared_variable_creator
-from tensorflow.contrib.distribute.python import values
 from tensorflow.python import pywrap_tensorflow
+from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute import reduce_util
+from tensorflow.python.distribute import shared_variable_creator
+from tensorflow.python.distribute import values
 from tensorflow.python.eager import context
 from tensorflow.python.eager import tape
 from tensorflow.python.framework import constant_op
@@ -196,16 +196,16 @@ def _reduce_non_distributed_value(extended, reduce_op, value, destinations):
   if reduce_op == reduce_util.ReduceOp.MEAN:
     return value
 
-  cross_tower_ops_lib.validate_destinations(destinations)
+  cross_device_ops_lib.validate_destinations(destinations)
   # We do not support a reduce op of SUM if the value is the same across
   # all replicas. We call this as part of assign functions for MirroredVariables
   # and summing up identical values across replicas is not clearly defined.
   if (len(extended.worker_devices) != 1 or
-      not cross_tower_ops_lib.check_destinations(destinations)):
+      not cross_device_ops_lib.check_destinations(destinations)):
     raise ValueError("A non-DistributedValues value %s cannot be reduced with "
                      "the given reduce op %s." % (value, reduce_op))
   # TODO(anjalisridhar): Moves these methods to a device utility file?
-  devices = cross_tower_ops_lib.get_devices_from(destinations)
+  devices = cross_device_ops_lib.get_devices_from(destinations)
   if len(devices) == 1:
     with ops.device(devices[0]):
       return array_ops.identity(value)
@@ -369,8 +369,7 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
                cross_device_ops=None,
                auto_shard_dataset=False):
     super(CoreMirroredExtended, self).__init__(container_strategy)
-    # TODO(josh11b): Rename self._cross_tower_ops -> self._cross_device_ops
-    self._cross_tower_ops = cross_device_ops
+    self._cross_device_ops = cross_device_ops
     self._auto_shard_dataset = auto_shard_dataset
     # Remember num GPUs which might be needed by `configure` method.
     if num_gpus is not None and num_gpus_per_worker is not None:
@@ -500,29 +499,32 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
       return values.PerReplicaDataset(
           self._call_dataset_fn(dataset_fn), self._devices)
 
+  def _make_dataset_iterator(self, dataset):
+    if self._cluster_spec:
+      worker_device_pairs = self._worker_devices
+    else:
+      worker_device_pairs = [("/job:localhost", self._devices)]
+    return values.DatasetIterator(dataset, worker_device_pairs,
+                                  self._num_replicas_in_sync)
+
   def _make_input_fn_iterator(
       self,
       input_fn,
       replication_mode=distribute_lib.InputReplicationMode.PER_WORKER):
+    input_contexts = []
     if self._cluster_spec:
-      input_fns = []
-      for i in range(len(self._worker_devices)):
-        input_context = distribute_lib.InputContext(
-            num_input_pipelines=len(self._worker_devices),
-            input_pipeline_id=i,
-            num_replicas_in_sync=self._num_replicas_in_sync)
-        input_fns.append(
-            partial(self._call_dataset_fn, input_fn, input_context))
-
-      return values.MultiWorkerDataset(input_fns, self._worker_devices,
-                                       self._auto_shard_dataset)
+      num_workers = len(self._worker_devices)
+      worker_device_pairs = self._worker_devices
     else:
-      input_context = distribute_lib.InputContext(
-          num_input_pipelines=1,
-          input_pipeline_id=0,
-          num_replicas_in_sync=self._num_replicas_in_sync)
-      return values.PerReplicaDataset(
-          self._call_dataset_fn(input_fn, input_context), self._devices)
+      num_workers = 1
+      worker_device_pairs = [("/job:localhost", self._devices)]
+    for i in range(num_workers):
+      input_contexts.append(distribute_lib.InputContext(
+          num_input_pipelines=num_workers,
+          input_pipeline_id=i,
+          num_replicas_in_sync=self._num_replicas_in_sync))
+    return values.InputFunctionIterator(
+        input_fn, worker_device_pairs, input_contexts)
 
   # TODO(priyag): Deal with OutOfRange errors once b/111349762 is fixed.
   def _experimental_run_steps_on_iterator(self, fn, iterator, iterations,
@@ -538,7 +540,7 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
       fn_inputs = iterator.get_next()
       if not isinstance(fn_inputs, tuple):
         fn_inputs = (fn_inputs,)
-      fn_result = fn(ctx, *fn_inputs)
+      fn_result = fn(ctx, fn_inputs)
       for (name, output) in ctx.last_step_outputs.items():
         # Convert all outputs to tensors, potentially from `DistributedValues`.
         ctx.last_step_outputs[name] = self._unwrap(output)
@@ -585,10 +587,15 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
     return ctx
 
   def _broadcast_to(self, tensor, destinations):
-    if isinstance(tensor, (float, int)):  # Fast path for Python constants.
+    # This is both a fast path for Python constants, and a way to delay
+    # converting Python values to a tensor until we know what type it
+    # should be converted to. Otherwise we have trouble with:
+    #   global_step.assign_add(1)
+    # since the `1` gets broadcast as an int32 but global_step is int64.
+    if isinstance(tensor, (float, int)):
       return tensor
     # TODO(josh11b): In eager mode, use one thread per device, or async mode.
-    return self._get_cross_tower_ops().broadcast(
+    return self._get_cross_device_ops().broadcast(
         tensor, destinations or self._devices)
 
   def _call_for_each_replica(self, fn, args, kwargs):
@@ -607,26 +614,27 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
     if cluster_spec:
       self._initialize_multi_worker(self._num_gpus, cluster_spec)
 
-    if self._cross_tower_ops is None:
+    if self._cross_device_ops is None:
       if self._cluster_spec:
         # It currently cannot detect the toplogy of remote workers. So we
         # hard-code the multi-worker all-reduce algorithm for now.
         if len(self._workers) == 1:
           # The default is "nccl".
-          self._cross_tower_ops = cross_tower_ops_lib.AllReduceCrossDeviceOps()
+          self._cross_device_ops = (
+              cross_device_ops_lib.AllReduceCrossDeviceOps())
         else:
           # The default is hierarchical reduce and broadcast.
-          self._cross_tower_ops = cross_tower_ops_lib.MultiWorkerAllReduce(
+          self._cross_device_ops = cross_device_ops_lib.MultiWorkerAllReduce(
               self._workers, self._num_gpus)
       else:
-        self._cross_tower_ops = cross_tower_ops_lib.choose_the_best(
+        self._cross_device_ops = cross_device_ops_lib.choose_the_best(
             self._devices, session_config=session_config)
 
-  def _get_cross_tower_ops(self):
-    if self._cross_tower_ops is None:
-      self._cross_tower_ops = (
-          cross_tower_ops_lib.ReductionToOneDeviceCrossDeviceOps())
-    return self._cross_tower_ops
+  def _get_cross_device_ops(self):
+    if self._cross_device_ops is None:
+      self._cross_device_ops = (
+          cross_device_ops_lib.ReductionToOneDeviceCrossDeviceOps())
+    return self._cross_device_ops
 
   def _reduce_to(self, reduce_op, value, destinations):
     assert not isinstance(value, values.Mirrored)
@@ -637,12 +645,12 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
       # be 0.
       return _reduce_non_distributed_value(self, reduce_op, value,
                                            destinations)
-    return self._get_cross_tower_ops().reduce(
+    return self._get_cross_device_ops().reduce(
         reduce_op, value, destinations=destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
-    return self._get_cross_tower_ops().batch_reduce(reduce_op,
-                                                    value_destination_pairs)
+    return self._get_cross_device_ops().batch_reduce(reduce_op,
+                                                     value_destination_pairs)
 
   def _update(self, var, fn, args, kwargs, group):
     # TODO(josh11b): In eager mode, use one thread per device.
@@ -723,7 +731,7 @@ class CoreMirroredExtended(distribute_lib.DistributionStrategyExtended):
     if colocate_with is None:
       return self._devices
     else:
-      return cross_tower_ops_lib.get_devices_from(colocate_with)
+      return cross_device_ops_lib.get_devices_from(colocate_with)
 
   class _MirroredReplicaThread(threading.Thread):
     """A thread that runs() a function on a device."""
@@ -885,6 +893,24 @@ class MirroredExtended(CoreMirroredExtended):
     super(MirroredExtended, self).__init__(
         container_strategy, devices, num_gpus, num_gpus_per_worker,
         cross_device_ops, auto_shard_dataset)
+
+  def _make_dataset_iterator(self, dataset):
+    """Make iterator from dataset without splitting the batch.
+
+    This implementation is different than the one in
+    `tf.distribute.MirroredStrategy` for purposes of backward compatibility.
+    We treat the incoming dataset's batch size as per replica batch size.
+
+    Args:
+      dataset: `tf.data.Dataset` for input.
+    Returns:
+      An `InputIterator` which returns inputs for each step of the computation.
+    """
+    if self._cluster_spec:
+      worker_device_pairs = self._worker_devices
+    else:
+      worker_device_pairs = [("/job:localhost", self._devices)]
+    return values.DatasetIterator(dataset, worker_device_pairs)
 
 
 class MirroredReplicaContext(distribute_lib.ReplicaContext):

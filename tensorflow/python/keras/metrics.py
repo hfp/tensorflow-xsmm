@@ -27,7 +27,6 @@ import weakref
 from enum import Enum
 import six
 
-from tensorflow.python.compat import compat
 from tensorflow.python.eager import context
 from tensorflow.python.eager import function
 from tensorflow.python.framework import dtypes
@@ -149,7 +148,8 @@ def result_wrapper(result_fn):
 
       # Wrapping result in merge_call. merge_call is used when we want to leave
       # replica mode and compute a value in cross replica mode.
-      result_t = replica_context.merge_call(merge_fn_wrapper, result_fn, *args)
+      result_t = replica_context.merge_call(
+          merge_fn_wrapper, args=(result_fn,) + args)
     check_is_tensor_or_operation(result_t,
                                  'Metric {0}\'s result'.format(metric_obj.name))
     return result_t
@@ -170,32 +170,6 @@ def weakmethod(method):
 
   del method
   return inner
-
-
-def safe_div(numerator, denominator):
-  """Computes a safe divide which returns 0 if the denominator is zero.
-
-  Note that the function contains an additional conditional check that is
-  necessary for avoiding situations where the loss is zero causing NaNs to
-  creep into the gradient computation.
-
-  Args:
-    numerator: An arbitrary `Tensor`.
-    denominator: A `Tensor` whose shape matches `numerator` and whose values are
-      assumed to be non-negative.
-
-  Returns:
-    The element-wise value of the numerator divided by the denominator.
-  """
-  if compat.forward_compatible(2018, 11, 1):
-    return math_ops.div_no_nan(numerator, denominator)
-  return array_ops.where(
-      math_ops.greater(denominator, 0),
-      math_ops.div(numerator,
-                   array_ops.where(
-                       math_ops.equal(denominator, 0),
-                       array_ops.ones_like(denominator), denominator)),
-      array_ops.zeros_like(numerator))
 
 
 def squeeze_or_expand_dimensions(y_pred, y_true, sample_weight):
@@ -274,6 +248,13 @@ class _ConfusionMatrix(Enum):
   FALSE_POSITIVES = 'fp'
   TRUE_NEGATIVES = 'tn'
   FALSE_NEGATIVES = 'fn'
+
+
+def _assert_thresholds_range(thresholds):
+  invalid_thresholds = [t for t in thresholds if t < 0 or t > 1]
+  if any(invalid_thresholds):
+    raise ValueError('Threshold values must be in [0, 1]. Invalid values: {}'
+                     .format(invalid_thresholds))
 
 
 def _update_confusion_matrix_variables(variables_to_update,
@@ -537,9 +518,20 @@ class Metric(Layer):
     Returns:
       The metric value tensor.
     """
-    update_op = self.update_state(*args, **kwargs)  # pylint: disable=not-callable
+    update_op = self.update_state(*args, **kwargs)
     with ops.control_dependencies([update_op]):
-      return self.result()  # pylint: disable=not-callable
+      result_t = self.result()
+
+      # We are adding the metric object as metadata on the result tensor.
+      # This is required when we want to use a metric with `add_metric` API on
+      # a Model/Layer in graph mode. This metric instance will later be used
+      # to reset variable state after each epoch of training.
+      # Example:
+      #   model = Model()
+      #   model.add_metric(Mean()(values), name='mean')
+      if not context.executing_eagerly():
+        result_t._metric_obj = self  # pylint: disable=protected-access
+      return result_t
 
   def reset_states(self):
     """Resets all of the metric state variables.
@@ -678,7 +670,7 @@ class Mean(Metric):
       return ops.convert_to_tensor(update_count_op)
 
   def result(self):
-    return safe_div(self.total, self.count)
+    return math_ops.div_no_nan(self.total, self.count)
 
 
 class MeanMetricWrapper(Mean):
@@ -723,7 +715,8 @@ class MeanMetricWrapper(Mean):
         matches, sample_weight=sample_weight)
 
   def get_config(self):
-    config = self._fn_kwargs
+    config = {'fn': self._fn}
+    config.update(self._fn_kwargs)
     base_config = super(MeanMetricWrapper, self).get_config()
     return dict(list(base_config.items()) + list(config.items()))
 
@@ -752,6 +745,12 @@ class BinaryAccuracy(MeanMetricWrapper):
     super(BinaryAccuracy, self).__init__(
         binary_accuracy, name, dtype=dtype, threshold=threshold)
 
+  @classmethod
+  def from_config(cls, config):
+    if 'fn' in config:
+      config.pop('fn')
+    return super(BinaryAccuracy, cls).from_config(config)
+
 
 class CategoricalAccuracy(MeanMetricWrapper):
   """Calculates how often predictions matches labels.
@@ -775,6 +774,12 @@ class CategoricalAccuracy(MeanMetricWrapper):
     super(CategoricalAccuracy, self).__init__(
         categorical_accuracy, name, dtype=dtype)
 
+  @classmethod
+  def from_config(cls, config):
+    if 'fn' in config:
+      config.pop('fn')
+    return super(CategoricalAccuracy, cls).from_config(config)
+
 
 class SparseCategoricalAccuracy(MeanMetricWrapper):
   """Calculates how often predictions matches integer labels.
@@ -792,12 +797,68 @@ class SparseCategoricalAccuracy(MeanMetricWrapper):
     super(SparseCategoricalAccuracy, self).__init__(
         sparse_categorical_accuracy, name, dtype=dtype)
 
+  @classmethod
+  def from_config(cls, config):
+    if 'fn' in config:
+      config.pop('fn')
+    return super(SparseCategoricalAccuracy, cls).from_config(config)
 
-class FalsePositives(Metric):
+
+class _ConfusionMatrixConditionCount(Metric):
+  """Calculates the number of the given confusion matrix condition."""
+
+  def __init__(self,
+               confusion_matrix_cond,
+               thresholds=None,
+               name=None,
+               dtype=None):
+    """Creates a `_ConfusionMatrixConditionCount` instance.
+
+    Args:
+      confusion_matrix_cond: One of `_ConfusionMatrix` conditions.
+      thresholds: (Optional) Defaults to [0.5]. A python list/tuple of float
+        threshold values in [0, 1]. A threshold is compared with prediction
+        values to determine the truth value of predictions (i.e., above the
+        threshold is `true`, below is `false`). One metric value is generated
+        for each threshold value.
+      name: (Optional) string name of the metric instance.
+      dtype: (Optional) data type of the metric result.
+    """
+    super(_ConfusionMatrixConditionCount, self).__init__(name=name, dtype=dtype)
+    self._confusion_matrix_cond = confusion_matrix_cond
+    self.thresholds = [0.5] if thresholds is None else thresholds
+    _assert_thresholds_range(self.thresholds)
+    self.accumulator = self.add_weight(
+        'accumulator',
+        shape=(len(self.thresholds),),
+        initializer=init_ops.zeros_initializer)
+
+  def update_state(self, y_true, y_pred, sample_weight=None):
+    """Accumulates the given confusion matrix condition statistics.
+
+    Args:
+      y_true: The ground truth values.
+      y_pred: The predicted values.
+      sample_weight: Optional weighting of each example. Defaults to 1. Can be a
+        `Tensor` whose rank is either 0, or the same rank as `y_true`, and must
+        be broadcastable to `y_true`.
+
+    Returns:
+      Update op.
+    """
+    return _update_confusion_matrix_variables({
+        self._confusion_matrix_cond: self.accumulator
+    }, y_true, y_pred, self.thresholds, sample_weight)
+
+  def result(self):
+    return ops.convert_to_tensor(self.accumulator)
+
+
+class FalsePositives(_ConfusionMatrixConditionCount):
   """Calculates the number of false positives.
 
   If `sample_weight` is given, calculates the sum of the weights of
-  false positives. This metric creates one local variable, `false_positives`
+  false positives. This metric creates one local variable, `accumulator`
   that is used to keep track of the number of false positives.
 
   If `sample_weight` is `None`, weights default to 1.
@@ -816,34 +877,101 @@ class FalsePositives(Metric):
       name: (Optional) string name of the metric instance.
       dtype: (Optional) data type of the metric result.
     """
-    super(FalsePositives, self).__init__(name=name, dtype=dtype)
-    self.thresholds = [0.5] if thresholds is None else thresholds
-    self.fp = self.add_weight(
-        'false_positives',
-        shape=(len(self.thresholds),),
-        initializer=init_ops.zeros_initializer)
+    super(FalsePositives, self).__init__(
+        confusion_matrix_cond=_ConfusionMatrix.FALSE_POSITIVES,
+        thresholds=thresholds,
+        name=name,
+        dtype=dtype)
 
-  def update_state(self, y_true, y_pred, sample_weight=None):
-    """Accumulates false positive statistics.
 
-    `y_true` and `y_pred` should have the same shape.
+class FalseNegatives(_ConfusionMatrixConditionCount):
+  """Calculates the number of false negatives.
+
+  If `sample_weight` is given, calculates the sum of the weights of
+  false negatives. This metric creates one local variable, `accumulator`
+  that is used to keep track of the number of false negatives.
+
+  If `sample_weight` is `None`, weights default to 1.
+  Use `sample_weight` of 0 to mask values.
+  """
+
+  def __init__(self, thresholds=None, name=None, dtype=None):
+    """Creates a `FalseNegatives` instance.
 
     Args:
-      y_true: The ground truth values.
-      y_pred: The predicted values.
-      sample_weight: Optional weighting of each example. Defaults to 1. Can be a
-        `Tensor` whose rank is either 0, or the same rank as `y_true`, and must
-        be broadcastable to `y_true`.
-
-    Returns:
-      Update op.
+      thresholds: (Optional) Defaults to [0.5]. A python list/tuple of float
+        threshold values in [0, 1]. A threshold is compared with prediction
+        values to determine the truth value of predictions (i.e., above the
+        threshold is `true`, below is `false`). One metric value is generated
+        for each threshold value.
+      name: (Optional) string name of the metric instance.
+      dtype: (Optional) data type of the metric result.
     """
-    return _update_confusion_matrix_variables({
-        _ConfusionMatrix.FALSE_POSITIVES: self.fp
-    }, y_true, y_pred, self.thresholds, sample_weight)
+    super(FalseNegatives, self).__init__(
+        confusion_matrix_cond=_ConfusionMatrix.FALSE_NEGATIVES,
+        thresholds=thresholds,
+        name=name,
+        dtype=dtype)
 
-  def result(self):
-    return ops.convert_to_tensor(self.fp)
+
+class TrueNegatives(_ConfusionMatrixConditionCount):
+  """Calculates the number of true negatives.
+
+  If `sample_weight` is given, calculates the sum of the weights of
+  true negatives. This metric creates one local variable, `accumulator`
+  that is used to keep track of the number of true negatives.
+
+  If `sample_weight` is `None`, weights default to 1.
+  Use `sample_weight` of 0 to mask values.
+  """
+
+  def __init__(self, thresholds=None, name=None, dtype=None):
+    """Creates a `TrueNegatives` instance.
+
+    Args:
+      thresholds: (Optional) Defaults to [0.5]. A python list/tuple of float
+        threshold values in [0, 1]. A threshold is compared with prediction
+        values to determine the truth value of predictions (i.e., above the
+        threshold is `true`, below is `false`). One metric value is generated
+        for each threshold value.
+      name: (Optional) string name of the metric instance.
+      dtype: (Optional) data type of the metric result.
+    """
+    super(TrueNegatives, self).__init__(
+        confusion_matrix_cond=_ConfusionMatrix.TRUE_NEGATIVES,
+        thresholds=thresholds,
+        name=name,
+        dtype=dtype)
+
+
+class TruePositives(_ConfusionMatrixConditionCount):
+  """Calculates the number of true positives.
+
+  If `sample_weight` is given, calculates the sum of the weights of
+  true positives. This metric creates one local variable, `true_positives`
+  that is used to keep track of the number of true positives.
+
+  If `sample_weight` is `None`, weights default to 1.
+  Use `sample_weight` of 0 to mask values.
+  """
+
+  def __init__(self, thresholds=None, name=None, dtype=None):
+    """Creates a `TruePositives` instance.
+
+    Args:
+      thresholds: (Optional) Defaults to [0.5]. A python list/tuple of float
+        threshold values in [0, 1]. A threshold is compared with prediction
+        values to determine the truth value of predictions (i.e., above the
+        threshold is `true`, below is `false`). One metric value is generated
+        for each threshold value.
+      name: (Optional) string name of the metric instance.
+      dtype: (Optional) data type of the metric result.
+    """
+    super(TruePositives, self).__init__(
+        confusion_matrix_cond=_ConfusionMatrix.TRUE_POSITIVES,
+        thresholds=thresholds,
+        name=name,
+        dtype=dtype)
 
 
 @tf_export('keras.metrics.binary_accuracy')

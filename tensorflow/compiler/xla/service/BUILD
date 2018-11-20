@@ -1730,7 +1730,9 @@ cc_library(
         ":hlo",
         ":hlo_pass",
         ":hlo_query",
+        ":pattern_matcher",
         ":while_loop_analysis",
+        "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:statusor",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -1743,9 +1745,13 @@ tf_cc_test(
     name = "while_loop_simplifier_test",
     srcs = ["while_loop_simplifier_test.cc"],
     deps = [
+        ":algebraic_simplifier",
         ":hlo",
+        ":hlo_cse",
         ":hlo_dce",
         ":hlo_matchers",
+        ":hlo_pass",
+        ":hlo_pass_pipeline",
         ":tuple_simplifier",
         ":while_loop_simplifier",
         "//tensorflow/compiler/xla:test",
@@ -2881,6 +2887,46 @@ tf_cc_test(
 )
 
 cc_library(
+    name = "hlo_get_dimension_size_rewriter",
+    srcs = ["hlo_get_dimension_size_rewriter.cc"],
+    hdrs = ["hlo_get_dimension_size_rewriter.h"],
+    deps = [
+        ":hlo",
+        ":hlo_pass",
+        ":shape_inference",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:literal_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:types",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/core:lib",
+        "@com_google_absl//absl/algorithm:container",
+    ],
+)
+
+tf_cc_test(
+    name = "hlo_get_dimension_size_rewriter_test",
+    srcs = ["hlo_get_dimension_size_rewriter_test.cc"],
+    deps = [
+        ":hlo",
+        ":hlo_get_dimension_size_rewriter",
+        ":hlo_matchers",
+        ":hlo_parser",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:types",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:test_utils",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+    ],
+)
+
+cc_library(
     name = "device_memory_allocator",
     srcs = [
         "device_memory_allocator.cc",
@@ -3343,9 +3389,9 @@ cc_library(
         ":tuple_util",
         ":while_loop_analysis",
         ":while_util",
+        "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/core:lib",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
