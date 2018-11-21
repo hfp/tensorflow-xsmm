@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/lite/allocation.h"
 #include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/memory_planner.h"
+#include "tensorflow/lite/profiling/profiler.h"
 #include "tensorflow/lite/util.h"
 
 namespace tflite {
@@ -55,7 +56,6 @@ class Subgraph {
   // Each index is bound check and this modifies the consistent_ flag of the
   // interpreter.
   TfLiteStatus SetVariables(std::vector<int> variables);
-
 
   // Adds a node with the given parameters and returns the index of the new
   // node in `node_index` (optionally). Interpreter will take ownership of
@@ -166,7 +166,6 @@ class Subgraph {
     return &nodes_and_registration_[node_index];
   }
 
-
   // Change the dimensionality of a given tensor. Note, this is only acceptable
   // for tensor indices that are inputs.
   // Returns status of failure or success.
@@ -226,7 +225,6 @@ class Subgraph {
     return kTfLiteOk;
   }
 
-
   // The default capacity of `tensors_` vector.
   static constexpr int kTensorsReservedCapacity = 128;
   // The capacity headroom of `tensors_` vector before calling ops'
@@ -241,6 +239,10 @@ class Subgraph {
   // to the value of the buffer.
   // WARNING: This is an experimental API and subject to change.
   TfLiteStatus ResetVariableTensors();
+
+  void SetProfiler(profiling::Profiler* profiler) { profiler_ = profiler; }
+
+  profiling::Profiler* GetProfiler() { return profiler_; }
 
  private:
   // Prevent 'context_' from accessing functions that are only available to
@@ -470,6 +472,9 @@ class Subgraph {
 
   // External contexts (kTfLiteMaxExternalContexts).
   TfLiteExternalContext** external_contexts_;
+
+  // Profiler for this interpreter instance.
+  profiling::Profiler* profiler_ = nullptr;
 };
 
 }  // namespace tflite
