@@ -43,6 +43,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.expand_dims": {
             "dim": "axis",
         },
+        "tf.batch_to_space_nd": {
+            "block_size": "block_shape",
+        },
         "tf.convert_to_tensor": {
             "preferred_dtype": "dtype_hint"
         },
@@ -70,6 +73,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "t": "x",
             "msg": "message",
         },
+        "tf.sparse.add": ["a", "b", "thresh"],
         "tf.sparse.split": {
             "split_dim": "axis",
         },
@@ -83,6 +87,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "t": "input",
             "m": "mean",
             "v": "variance",
+        },
+        "tf.manip.batch_to_space_nd": {
+            "block_size": "block_shape",
         },
         "tf.nn.conv3d": {
             "filter": "filters"
@@ -104,8 +111,130 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.gfile.Exists": {
             "filename": "path",
         },
+        "tf.gfile.Remove": {
+            "filename": "path",
+        },
+        "tf.gfile.Stat": {
+            "filename": "path",
+        },
+        "tf.gfile.Glob": {
+            "filename": "pattern",
+        },
+        "tf.gfile.MkDir": {
+            "dirname": "path",
+        },
+        "tf.gfile.MakeDirs": {
+            "dirname": "path",
+        },
+        "tf.gfile.DeleteRecursively": {
+            "dirname": "path",
+        },
+        "tf.gfile.IsDirectory": {
+            "dirname": "path",
+        },
+        "tf.gfile.ListDirectory": {
+            "dirname": "path",
+        },
+        "tf.gfile.Copy": {
+            "oldpath": "src",
+            "newpath": "dst",
+        },
+        "tf.gfile.Rename": {
+            "oldpath": "src",
+            "newpath": "dst",
+        },
+        "tf.gfile.Walk": {
+            "in_order": "topdown",
+        },
         "tf.random.stateless_multinomial": {
             "output_dtype": "dtype",
+        },
+        "tf.linalg.l2_normalize": {
+            "dim": "axis",
+        },
+        "tf.math.l2_normalize": {
+            "dim": "axis",
+        },
+        "tf.nn.l2_normalize": {
+            "dim": "axis",
+        },
+        "tf.sparse.concat": [
+            "axis", "sp_inputs", "name", "expand_nonconcat_dim", "concat_dim"
+        ],
+        "tf.reduce_all": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_all": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_any": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_any": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_min": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_min": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_max": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_max": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_sum": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_sum": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_mean": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_mean": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_prod": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_prod": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_logsumexp": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.math.reduce_logsumexp": {
+            "reduction_indices": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.reduce_join": {
+            "keep_dims": "keepdims",
+            "reduction_indices": "axis"
+        },
+        "tf.strings.reduce_join": {
+            "keep_dims": "keepdims",
+            "reduction_indices": "axis"
+        },
+        "tf.squeeze": {
+            "squeeze_dims": "axis",
         },
     }
 
@@ -117,6 +246,19 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     # function_reorders or function_keyword_renames, use the OLD function name.
     # These renames happen after the arguments have been processed.
     self.symbol_renames.update({
+        "tf.batch_to_space_nd": "tf.batch_to_space",
+        "tf.gfile.Copy": "tf.io.gfile.Copy",
+        "tf.gfile.DeleteRecursively": "tf.io.gfile.DeleteRecursively",
+        "tf.gfile.Exists": "tf.io.gfile.Exists",
+        "tf.gfile.Glob": "tf.io.gfile.Glob",
+        "tf.gfile.IsDirectory": "tf.io.gfile.IsDirectory",
+        "tf.gfile.ListDirectory": "tf.io.gfile.ListDirectory",
+        "tf.gfile.MakeDirs": "tf.io.gfile.MakeDirs",
+        "tf.gfile.MkDir": "tf.io.gfile.MkDir",
+        "tf.gfile.Remove": "tf.io.gfile.Remove",
+        "tf.gfile.Rename": "tf.io.gfile.Rename",
+        "tf.gfile.Stat": "tf.io.gfile.Stat",
+        "tf.gfile.Walk": "tf.io.gfile.Walk",
         "tf.contrib.data.AUTOTUNE": "tf.data.experimental.AUTOTUNE",
         "tf.contrib.data.Counter": "tf.data.experimental.Counter",
         "tf.contrib.data.CheckpointInputPipelineHook": "tf.data.experimental.CheckpointInputPipelineHook",
@@ -161,12 +303,14 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.contrib.data.unique": "tf.data.experimental.unique",
         "tf.contrib.framework.sort": "tf.sort",
         "tf.contrib.framework.argsort": "tf.argsort",
+        "tf.manip.batch_to_space_nd": "tf.batch_to_space",
         "tf.quantize_v2": "tf.quantization.quantize",
         "tf.sparse_concat": "tf.sparse.concat",
         "tf.sparse_split": "tf.sparse.split",
         "tf.multinomial": "tf.random.categorical",
         "tf.random.multinomial": "tf.random.categorical",
         "tf.load_file_system_library": "tf.load_library",
+        "tf.pywrap_tensorflow": "tf.compat.v1.pywrap_tensorflow",
     })
     # pylint: enable=line-too-long
 
@@ -184,13 +328,17 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     # IMPORTANT: order here should correspond to OLD argument order.
     # We just prepend "arg_name=" to all arguments in function calls.
     self.function_reorders = {
+        "tf.io.serialize_sparse": ["sp_input", "name", "out_type"],
+        "tf.io.serialize_many_sparse": ["sp_input", "name", "out_type"],
         "tf.argmax": ["input", "axis", "name", "dimension", "output_type"],
         "tf.argmin": ["input", "axis", "name", "dimension", "output_type"],
+        "tf.batch_to_space": ["input", "crops", "block_size", "name"],
         "tf.boolean_mask": ["tensor", "mask", "name", "axis"],
         "tf.convert_to_tensor": ["value", "dtype", "name", "preferred_dtype"],
         "tf.nn.convolution": [
             "input", "filter", "padding", "strides", "dilation_rate", "name",
-            "data_format"],
+            "data_format"
+        ],
         "tf.nn.crelu": ["features", "name", "axis"],
         "tf.nn.pool": [
             "input", "window_shape", "pooling_type", "padding", "dilation_rate",
@@ -200,6 +348,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "input", "filter", "strides", "padding", "rate", "name",
             "data_format"
         ],
+        "tf.manip.batch_to_space_nd": ["input", "crops", "block_size", "name"],
         "tf.multinomial": [
             "logits", "num_samples", "seed", "name", "output_dtype"
         ],
@@ -208,19 +357,19 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         ],
         "tf.pad": ["tensor", "paddings", "mode", "name", "constant_values"],
         "tf.quantize_v2": [
-            "input", "min_range", "max_range", "T", "mode", "name",
-            "round_mode"
+            "input", "min_range", "max_range", "T", "mode", "name", "round_mode"
         ],
         "tf.feature_column.categorical_column_with_vocabulary_file": [
-            "key", "vocabulary_file", "vocabulary_size",
-            "num_oov_buckets", "default_value", "dtype"
+            "key", "vocabulary_file", "vocabulary_size", "num_oov_buckets",
+            "default_value", "dtype"
         ],
         "tf.shape": ["input", "name", "out_type"],
         "tf.size": ["input", "name", "out_type"],
+        "tf.random.poisson": ["lam", "shape", "dtype", "seed", "name"],
+        "tf.sparse.add": ["a", "b", "thresh"],
         "tf.sparse.concat": [
             "axis", "sp_inputs", "name", "expand_nonconcat_dim", "concat_dim"
         ],
-        "tf.random.poisson": ["lam", "shape", "dtype", "seed", "name"],
         "tf.sparse.segment_mean": [
             "data", "indices", "segment_ids", "name", "num_segments"
         ],
@@ -230,13 +379,98 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.sparse.segment_sum": [
             "data", "indices", "segment_ids", "name", "num_segments"
         ],
+        "tf.io.decode_csv": [
+            "records", "record_defaults",
+            "field_delim", "use_quote_delim",
+            "name", "na_value", "select_cols",
+        ],
+        "tf.strings.substr": ["input", "pos", "len", "name", "unit"],
+        "tf.strings.reduce_join": [
+            "input", "axis", "keep_dims", "separator", "name",
+            "reduction_indices"
+        ],
         "tf.strings.length": ["input", "name", "unit"],
         "tf.transpose": ["a", "perm", "name", "conjugate"],
         "tf.tuple": ["tensors", "name", "control_inputs"],
-        "tf.while_loop": ["cond", "body", "loop_vars", "shape_invariants",
-                          "parallel_iterations", "back_prop", "swap_memory",
-                          "name", "maximum_iterations",
-                          "return_same_structure"],
+        "tf.io.parse_example": [
+            "serialized", "features", "name", "example_names"
+        ],
+        "tf.io.parse_single_example": [
+            "serialized", "features", "name", "example_names"
+        ],
+        "tf.while_loop": [
+            "cond", "body", "loop_vars", "shape_invariants",
+            "parallel_iterations", "back_prop", "swap_memory", "name",
+            "maximum_iterations", "return_same_structure"
+        ],
+        "tf.reduce_all": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_all": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_any": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_any": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_min": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_min": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_max": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_max": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_sum": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_sum": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_mean": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_mean": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_prod": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_prod": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_logsumexp": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.math.reduce_logsumexp": [
+            "input_tensor", "axis", "keepdims", "name", "reduction_indices",
+            "keep_dims"
+        ],
+        "tf.reduce_join": [
+            "input", "axis", "keep_dims", "separator", "name",
+            "reduction_indices"
+        ],
     }
 
     # Specially handled functions.
@@ -356,8 +590,8 @@ if __name__ == "__main__":
       description="""Convert a TensorFlow Python file to 2.0
 
 Simple usage:
-  tf_convert_v2.py --infile foo.py --outfile bar.py
-  tf_convert_v2.py --intree ~/code/old --outtree ~/code/new
+  tf_upgrade_v2.py --infile foo.py --outfile bar.py
+  tf_upgrade_v2.py --intree ~/code/old --outtree ~/code/new
 """)
   parser.add_argument(
       "--infile",

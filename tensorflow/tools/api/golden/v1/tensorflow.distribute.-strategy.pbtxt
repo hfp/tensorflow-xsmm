@@ -1,6 +1,6 @@
 path: "tensorflow.distribute.Strategy"
 tf_class {
-  is_instance: "<class \'tensorflow.python.training.distribute.DistributionStrategy\'>"
+  is_instance: "<class \'tensorflow.python.distribute.distribute_lib.DistributionStrategy\'>"
   is_instance: "<type \'object\'>"
   member {
     name: "between_graph"
@@ -121,6 +121,10 @@ tf_class {
   member_method {
     name: "update"
     argspec: "args=[\'self\', \'var\', \'fn\'], varargs=args, keywords=kwargs, defaults=None"
+  }
+  member_method {
+    name: "update_config_proto"
+    argspec: "args=[\'self\', \'config_proto\'], varargs=None, keywords=None, defaults=None"
   }
   member_method {
     name: "update_non_slot"

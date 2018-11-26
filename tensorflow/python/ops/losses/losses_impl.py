@@ -33,32 +33,8 @@ from tensorflow.python.util.deprecation import deprecated_argument_lookup
 from tensorflow.python.util.tf_export import tf_export
 
 
-@tf_export("losses.Reduction", v1=[])
-class ReductionV2(object):
-  """Types of loss reduction.
-
-  Contains the following values:
-  `NONE`: Un-reduced weighted losses with the same shape as input.
-  `SUM`: Scalar sum of weighted losses.
-  `SUM_OVER_BATCH_SIZE`: Scalar `SUM` divided by number of elements in losses.
-  """
-
-  NONE = "none"
-  SUM = "weighted_sum"
-  SUM_OVER_BATCH_SIZE = "weighted_sum_over_batch_size"
-
-  @classmethod
-  def all(cls):
-    return (cls.NONE, cls.SUM, cls.SUM_OVER_BATCH_SIZE)
-
-  @classmethod
-  def validate(cls, key):
-    if key not in cls.all():
-      raise ValueError("Invalid Reduction Key %s." % key)
-
-
 @tf_export(v1=["losses.Reduction"])
-class Reduction(ReductionV2):
+class Reduction(object):
   """Types of loss reduction.
 
   Contains the following values:
@@ -71,6 +47,9 @@ class Reduction(ReductionV2):
   `SUM_BY_NONZERO_WEIGHTS`: Same as `SUM_OVER_NONZERO_WEIGHTS`.
   """
 
+  NONE = "none"
+  SUM = "weighted_sum"
+  SUM_OVER_BATCH_SIZE = "weighted_sum_over_batch_size"
   MEAN = "weighted_mean"
   SUM_BY_NONZERO_WEIGHTS = "weighted_sum_by_nonzero_weights"
   SUM_OVER_NONZERO_WEIGHTS = SUM_BY_NONZERO_WEIGHTS
@@ -583,12 +562,10 @@ def mean_pairwise_squared_error(
 
       diffs = math_ops.subtract(predictions, labels)
 
-      reduction_indices = math_ops.range(1, array_ops.rank(diffs))
+      axis = math_ops.range(1, array_ops.rank(diffs))
 
       sum_squares_diff_per_batch = math_ops.reduce_sum(
-          math_ops.square(diffs),
-          reduction_indices=reduction_indices,
-          keepdims=True)
+          math_ops.square(diffs), axis=axis, keepdims=True)
       num_present_per_batch = _num_present(diffs, weights, per_batch=True)
 
       term1 = 2.0 * math_ops.div_no_nan(
@@ -596,8 +573,7 @@ def mean_pairwise_squared_error(
           math_ops.maximum(num_present_per_batch - 1, 0),
           name="value")
 
-      sum_diff = math_ops.reduce_sum(
-          diffs, reduction_indices=reduction_indices, keepdims=True)
+      sum_diff = math_ops.reduce_sum(diffs, axis=axis, keepdims=True)
       term2 = 2.0 * math_ops.div_no_nan(
           math_ops.square(sum_diff),
           math_ops.maximum(

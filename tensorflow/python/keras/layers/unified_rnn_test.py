@@ -288,7 +288,7 @@ class RNNTest(test.TestCase):
                    'Normal LSTM', (total_duration / epoch))
       return total_duration / epoch
 
-  def test_performance_with_standard_cudnn_impl(self):
+  def DISABLED_test_performance_with_standard_cudnn_impl(self):
     if not test.is_gpu_available():
       self.skipTest('performance test will only run on GPU')
 
@@ -322,7 +322,7 @@ class RNNTest(test.TestCase):
     self.assertGreaterEqual(
         cudnn_vs_unified, 0.80,
         'Expect the performance of Unified LSTM is within 80% of CuDNN LSTM, '
-        'but got {}'.format(cudnn_vs_unified * 100))
+        'but got {}%'.format(cudnn_vs_unified * 100))
     # Assert the performance diff between CPU impl and GPU impl should be more
     # than 5 times.
     self.assertGreaterEqual(

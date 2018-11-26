@@ -21942,6 +21942,18 @@ op {
   }
 }
 op {
+  name: "ExperimentalMatchingFilesDataset"
+  input_arg {
+    name: "patterns"
+    type: DT_STRING
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
+  }
+  is_stateful: true
+}
+op {
   name: "ExperimentalMaterializedIndexDatasetHandle"
   output_arg {
     name: "handle"
@@ -21968,6 +21980,33 @@ op {
     minimum: 1
   }
   is_stateful: true
+}
+op {
+  name: "ExperimentalMaxIntraOpParallelismDataset"
+  input_arg {
+    name: "input_dataset"
+    type: DT_VARIANT
+  }
+  input_arg {
+    name: "max_intra_op_parallelism"
+    type: DT_INT64
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
+  }
+  attr {
+    name: "output_types"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "output_shapes"
+    type: "list(shape)"
+    has_minimum: true
+    minimum: 1
+  }
 }
 op {
   name: "ExperimentalNonSerializableDataset"
@@ -22026,6 +22065,33 @@ op {
     name: "Targuments"
     type: "list(type)"
     has_minimum: true
+  }
+  attr {
+    name: "output_types"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "output_shapes"
+    type: "list(shape)"
+    has_minimum: true
+    minimum: 1
+  }
+}
+op {
+  name: "ExperimentalPrivateThreadPoolDataset"
+  input_arg {
+    name: "input_dataset"
+    type: DT_VARIANT
+  }
+  input_arg {
+    name: "num_threads"
+    type: DT_INT64
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
   }
   attr {
     name: "output_types"
@@ -31489,18 +31555,6 @@ op {
     name: "filenames"
     type: DT_STRING
   }
-}
-op {
-  name: "MatchingFilesDataset"
-  input_arg {
-    name: "patterns"
-    type: DT_STRING
-  }
-  output_arg {
-    name: "handle"
-    type: DT_VARIANT
-  }
-  is_stateful: true
 }
 op {
   name: "MatrixBandPart"

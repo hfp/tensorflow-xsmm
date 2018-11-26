@@ -308,7 +308,6 @@ class VariableScopeTest(test.TestCase):
       self.evaluate(variables_lib.global_variables_initializer())
       self.assertAllEqual(self.evaluate(x.value()), self.evaluate(y.value()))
 
-  # TODO(alive): support variable partitioning/caching in eager mode.
   # TODO(mihaimaruseac): Not converted to use wrap_function because of
   # InvalidArgumentError: /job:moo/replica:0/task:0/device:CPU:0 unknown device.
   def testVarScopeCachingDevice(self):
@@ -438,15 +437,15 @@ class VariableScopeTest(test.TestCase):
         sess.run(v0)
       # We should be able to initialize and run v1 without initializing
       # v0, even if the variable was created with a control dep on v0.
-      self.evaluate(v1.initializer)
-      self.assertEqual(1, self.evaluate(v1))
+      sess.run(v1.initializer)
+      self.assertEqual(1, sess.run(v1))
       # v0 should still be uninitialized.
       with self.assertRaisesRegexp(errors.OpError, "uninitialized"):
         sess.run(v0)
       with self.assertRaisesRegexp(errors.OpError, "uninitialized"):
         sess.run(add)
       # If we initialize v0 we should be able to run 'add'.
-      self.evaluate(v0.initializer)
+      sess.run(v0.initializer)
       sess.run(add)
 
   # TODO(mihaimaruseac): Not converted to use wrap_function because of
@@ -490,10 +489,10 @@ class VariableScopeTest(test.TestCase):
       v2 = var_dict["v2"]
       # We should be able to initialize and run v1 and v2 without initializing
       # v0, even if the variable was created with a control dep on v0.
-      self.evaluate(v1.initializer)
-      self.assertEqual([1], self.evaluate(v1))
-      self.evaluate(v2.initializer)
-      self.assertEqual([2], self.evaluate(v2))
+      sess.run(v1.initializer)
+      self.assertEqual([1], sess.run(v1))
+      sess.run(v2.initializer)
+      self.assertEqual([2], sess.run(v2))
       # v0 should still be uninitialized.
       with self.assertRaisesRegexp(errors.OpError, "uninitialized"):
         sess.run(v0)
@@ -501,7 +500,7 @@ class VariableScopeTest(test.TestCase):
       with self.assertRaisesRegexp(errors.OpError, "uninitialized"):
         sess.run(add)
       # If we initialize v0 we should be able to run 'add'.
-      self.evaluate(v0.initializer)
+      sess.run(v0.initializer)
       sess.run(add)
 
   # TODO(mihaimaruseac): Not converted to use wrap_function because of
@@ -1404,6 +1403,14 @@ class VariableScopeWithPartitioningTest(test.TestCase):
       v_reused = variable_scope.get_variable("name0")
     self.assertEqual(v, v_reused)
 
+  def testNoReuseInEagerByDefault(self):
+    with context.eager_mode():
+      with variable_scope.variable_scope(
+          "scope0", partitioner=axis0_into2_partitioner):
+        v1 = variable_scope.get_variable("name0", shape=(3, 1, 1))
+        v2 = variable_scope.get_variable("name0", shape=(3, 1, 1))
+        self.assertIsNot(v1, v2)
+
   @test_util.run_in_graph_and_eager_modes
   @run_inside_wrap_function_in_eager_mode
   def testPropagatePartitionerOnReopening(self):
@@ -1458,6 +1465,10 @@ class VariableScopeWithPartitioningTest(test.TestCase):
   @run_inside_wrap_function_in_eager_mode
   def testPartitionConcatenatesAlongCorrectAxisResource(self):
     self._testPartitionConcatenatesAlongCorrectAxis(use_resource=True)
+
+  def testPartitionConcatenatesAlongCorrectAxisResourceInEager(self):
+    with context.eager_mode():
+      self._testPartitionConcatenatesAlongCorrectAxis(use_resource=True)
 
 
 class VariableScopeWithCustomGetterTest(test.TestCase):

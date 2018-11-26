@@ -48,9 +48,9 @@ from tensorflow.python.keras.losses import sparse_categorical_crossentropy
 from tensorflow.python.keras.losses import squared_hinge
 from tensorflow.python.keras.utils.generic_utils import deserialize_keras_object
 from tensorflow.python.keras.utils.generic_utils import serialize_keras_object
+from tensorflow.python.keras.utils.losses_utils import squeeze_or_expand_dimensions
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import check_ops
-from tensorflow.python.ops import confusion_matrix
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -172,77 +172,6 @@ def weakmethod(method):
   return inner
 
 
-def squeeze_or_expand_dimensions(y_pred, y_true, sample_weight):
-  """Squeeze or expand last dimension if needed.
-
-  1. Squeezes last dim of `y_pred` or `y_true` if their rank differs by 1
-  (using `confusion_matrix.remove_squeezable_dimensions`).
-  2. Squeezes or expands last dim of `sample_weight` if its rank differs by 1
-  from the new rank of `y_pred`.
-  If `sample_weight` is scalar, it is kept scalar.
-
-  This will use static shape if available. Otherwise, it will add graph
-  operations, which could result in a performance hit.
-
-  Args:
-    y_pred: Predicted values, a `Tensor` of arbitrary dimensions.
-    y_true: Optional label `Tensor` whose dimensions match `y_pred`.
-    sample_weight: Optional weight scalar or `Tensor` whose dimensions match
-      `y_pred`.
-
-  Returns:
-    Tuple of `y_pred`, `y_true` and `sample_weight`. Each of them possibly has
-    the last dimension squeezed,
-    `sample_weight` could be extended by one dimension.
-  """
-  if y_true is not None:
-    # squeeze last dim of `y_pred` or `y_true` if their rank differs by 1
-    y_true, y_pred = confusion_matrix.remove_squeezable_dimensions(
-        y_true, y_pred)
-
-  if sample_weight is None:
-    return y_pred, y_true, None
-
-  sample_weight = ops.convert_to_tensor(sample_weight)
-  weights_shape = sample_weight.get_shape()
-  weights_rank = weights_shape.ndims
-  if weights_rank == 0:  # If weights is scalar, do nothing.
-    return y_pred, y_true, sample_weight
-
-  y_pred_shape = y_pred.get_shape()
-  y_pred_rank = y_pred_shape.ndims
-  if (y_pred_rank is not None) and (weights_rank is not None):
-    # Use static rank.
-    if weights_rank - y_pred_rank == 1:
-      sample_weight = array_ops.squeeze(sample_weight, [-1])
-    elif y_pred_rank - weights_rank == 1:
-      sample_weight = array_ops.expand_dims(sample_weight, [-1])
-    return y_pred, y_true, sample_weight
-
-  # Use dynamic rank.
-  weights_rank_tensor = array_ops.rank(sample_weight)
-  rank_diff = weights_rank_tensor - array_ops.rank(y_pred)
-  maybe_squeeze_weights = lambda: array_ops.squeeze(sample_weight, [-1])
-
-  def _maybe_expand_weights():
-    return control_flow_ops.cond(
-        math_ops.equal(rank_diff,
-                       -1), lambda: array_ops.expand_dims(sample_weight, [-1]),
-        lambda: sample_weight)
-
-  def _maybe_adjust_weights():
-    return control_flow_ops.cond(
-        math_ops.equal(rank_diff, 1), maybe_squeeze_weights,
-        _maybe_expand_weights)
-
-  # squeeze or expand last dim of `sample_weight` if its rank differs by 1
-  # from the new rank of `y_pred`.
-  sample_weight = control_flow_ops.cond(
-      math_ops.equal(weights_rank_tensor, 0), lambda: sample_weight,
-      _maybe_adjust_weights)
-  return y_pred, y_true, sample_weight
-
-
 class _ConfusionMatrix(Enum):
   TRUE_POSITIVES = 'tp'
   FALSE_POSITIVES = 'fp'
@@ -301,7 +230,9 @@ def _update_confusion_matrix_variables(variables_to_update,
   """
   if variables_to_update is None:
     return
-  y_pred.get_shape().assert_is_compatible_with(y_true.get_shape())
+  y_true = ops.convert_to_tensor(y_true)
+  y_pred = ops.convert_to_tensor(y_pred)
+  y_pred.shape.assert_is_compatible_with(y_true.shape)
 
   if not any(
       key for key in variables_to_update if key in list(_ConfusionMatrix)):
@@ -587,7 +518,7 @@ class Metric(Layer):
   ### End: For use by subclasses ###
 
 
-@tf_export('metrics.Mean', 'keras.metrics.Mean', v1=[])
+@tf_export('metrics.Mean', 'keras.metrics.Mean')
 class Mean(Metric):
   """Computes the (weighted) mean of the given values.
 
@@ -674,7 +605,8 @@ class Mean(Metric):
     update_total_op = state_ops.assign_add(self.total, values)
     with ops.control_dependencies([update_total_op]):
       update_count_op = state_ops.assign_add(self.count, num_values)
-      return ops.convert_to_tensor(update_count_op)
+      with ops.control_dependencies([update_count_op]):
+        return control_flow_ops.no_op()
 
   def result(self):
     return math_ops.div_no_nan(self.total, self.count)
@@ -728,7 +660,7 @@ class MeanMetricWrapper(Mean):
     return dict(list(base_config.items()) + list(config.items()))
 
 
-@tf_export('metrics.Accuracy', 'keras.metrics.Accuracy', v1=[])
+@tf_export('metrics.Accuracy', 'keras.metrics.Accuracy')
 class Accuracy(MeanMetricWrapper):
   """Calculates how often predictions matches labels.
 
@@ -770,7 +702,7 @@ class Accuracy(MeanMetricWrapper):
     return super(Accuracy, cls).from_config(config)
 
 
-@tf_export('metrics.BinaryAccuracy', 'keras.metrics.BinaryAccuracy', v1=[])
+@tf_export('metrics.BinaryAccuracy', 'keras.metrics.BinaryAccuracy')
 class BinaryAccuracy(MeanMetricWrapper):
   """Calculates how often predictions matches labels.
 
@@ -822,7 +754,7 @@ class BinaryAccuracy(MeanMetricWrapper):
 
 
 @tf_export(
-    'metrics.CategoricalAccuracy', 'keras.metrics.CategoricalAccuracy', v1=[])
+    'metrics.CategoricalAccuracy', 'keras.metrics.CategoricalAccuracy')
 class CategoricalAccuracy(MeanMetricWrapper):
   """Calculates how often predictions matches labels.
 
@@ -877,8 +809,7 @@ class CategoricalAccuracy(MeanMetricWrapper):
 
 @tf_export(
     'metrics.SparseCategoricalAccuracy',
-    'keras.metrics.SparseCategoricalAccuracy',
-    v1=[])
+    'keras.metrics.SparseCategoricalAccuracy')
 class SparseCategoricalAccuracy(MeanMetricWrapper):
   """Calculates how often predictions matches integer labels.
 
@@ -975,8 +906,13 @@ class _ConfusionMatrixConditionCount(Metric):
     return ops.convert_to_tensor(self.accumulator)
 
 
+@tf_export('metrics.FalsePositives', 'keras.metrics.FalsePositives')
 class FalsePositives(_ConfusionMatrixConditionCount):
   """Calculates the number of false positives.
+
+  For example, if `y_true` is [0, 1, 0, 0] and `y_pred` is [0, 0, 1, 1]
+  then the false positives value is 2.  If the weights were specified as
+  [0, 0, 1, 0] then the false positives value would be 1.
 
   If `sample_weight` is given, calculates the sum of the weights of
   false positives. This metric creates one local variable, `accumulator`
@@ -984,6 +920,21 @@ class FalsePositives(_ConfusionMatrixConditionCount):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.FalsePositives()
+  m.update_state([0, 1, 0, 0], [0, 0, 1, 1])
+  print('Final result: ', m.result().numpy())  # Final result: 2
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.FalsePositives()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):
@@ -1005,8 +956,13 @@ class FalsePositives(_ConfusionMatrixConditionCount):
         dtype=dtype)
 
 
+@tf_export('metrics.FalseNegatives', 'keras.metrics.FalseNegatives')
 class FalseNegatives(_ConfusionMatrixConditionCount):
   """Calculates the number of false negatives.
+
+  For example, if `y_true` is [0, 1, 1, 1] and `y_pred` is [0, 1, 0, 0]
+  then the false negatives value is 2.  If the weights were specified as
+  [0, 0, 1, 0] then the false negatives value would be 1.
 
   If `sample_weight` is given, calculates the sum of the weights of
   false negatives. This metric creates one local variable, `accumulator`
@@ -1014,6 +970,21 @@ class FalseNegatives(_ConfusionMatrixConditionCount):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.FalseNegatives()
+  m.update_state([0, 1, 1, 1], [0, 1, 0, 0])
+  print('Final result: ', m.result().numpy())  # Final result: 2
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.FalseNegatives()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):
@@ -1035,8 +1006,13 @@ class FalseNegatives(_ConfusionMatrixConditionCount):
         dtype=dtype)
 
 
+@tf_export('metrics.TrueNegatives', 'keras.metrics.TrueNegatives')
 class TrueNegatives(_ConfusionMatrixConditionCount):
   """Calculates the number of true negatives.
+
+  For example, if `y_true` is [0, 1, 0, 0] and `y_pred` is [1, 1, 0, 0]
+  then the true negatives value is 2.  If the weights were specified as
+  [0, 0, 1, 0] then the true negatives value would be 1.
 
   If `sample_weight` is given, calculates the sum of the weights of
   true negatives. This metric creates one local variable, `accumulator`
@@ -1044,6 +1020,21 @@ class TrueNegatives(_ConfusionMatrixConditionCount):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.TrueNegatives()
+  m.update_state([0, 1, 0, 0], [1, 1, 0, 0])
+  print('Final result: ', m.result().numpy())  # Final result: 2
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.TrueNegatives()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):
@@ -1065,8 +1056,13 @@ class TrueNegatives(_ConfusionMatrixConditionCount):
         dtype=dtype)
 
 
+@tf_export('metrics.TruePositives', 'keras.metrics.TruePositives')
 class TruePositives(_ConfusionMatrixConditionCount):
   """Calculates the number of true positives.
+
+  For example, if `y_true` is [0, 1, 1, 1] and `y_pred` is [1, 0, 1, 1]
+  then the true positives value is 2.  If the weights were specified as
+  [0, 0, 1, 0] then the true positives value would be 1.
 
   If `sample_weight` is given, calculates the sum of the weights of
   true positives. This metric creates one local variable, `true_positives`
@@ -1074,6 +1070,21 @@ class TruePositives(_ConfusionMatrixConditionCount):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.TruePositives()
+  m.update_state([0, 1, 1, 1], [1, 0, 1, 1])
+  print('Final result: ', m.result().numpy())  # Final result: 2
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.TruePositives()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):
@@ -1095,8 +1106,13 @@ class TruePositives(_ConfusionMatrixConditionCount):
         dtype=dtype)
 
 
+@tf_export('metrics.Precision', 'keras.metrics.Precision')
 class Precision(Metric):
   """Computes the precision of the predictions with respect to the labels.
+
+  For example, if `y_true` is [0, 1, 1, 1] and `y_pred` is [1, 0, 1, 1]
+  then the precision value is 2/(2+1) ie. 0.66. If the weights were specified as
+  [0, 0, 1, 0] then the precision value would be 1.
 
   The metric creates two local variables, `true_positives` and `false_positives`
   that are used to compute the precision. This value is ultimately returned as
@@ -1105,6 +1121,21 @@ class Precision(Metric):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.Precision()
+  m.update_state([0, 1, 1, 1], [1, 0, 1, 1])
+  print('Final result: ', m.result().numpy())  # Final result: 0.66
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.Precision()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):
@@ -1155,8 +1186,13 @@ class Precision(Metric):
         array_ops.zeros_like(self.thresholds))
 
 
+@tf_export('metrics.Recall', 'keras.metrics.Recall')
 class Recall(Metric):
   """Computes the recall of the predictions with respect to the labels.
+
+  For example, if `y_true` is [0, 1, 1, 1] and `y_pred` is [1, 0, 1, 1]
+  then the recall value is 2/(2+1) ie. 0.66. If the weights were specified as
+  [0, 0, 1, 0] then the recall value would be 1.
 
   This metric creates two local variables, `true_positives` and
   `false_negatives`, that are used to compute the recall. This value is
@@ -1165,6 +1201,21 @@ class Recall(Metric):
 
   If `sample_weight` is `None`, weights default to 1.
   Use `sample_weight` of 0 to mask values.
+
+  Usage:
+
+  ```python
+  m = tf.metrics.Recall()
+  m.update_state([0, 1, 1, 1], [1, 0, 1, 1])
+  print('Final result: ', m.result().numpy())  # Final result: 0.66
+  ```
+
+  Usage with tf.keras API:
+
+  ```python
+  model = keras.models.Model(inputs, outputs)
+  model.compile('sgd', loss='mse', metrics=[tf.metrics.Recall()])
+  ```
   """
 
   def __init__(self, thresholds=None, name=None, dtype=None):

@@ -30,6 +30,9 @@ import six
 from tensorflow.python.data.experimental.ops import batching
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.ops import multi_device_iterator_ops
+from tensorflow.python.distribute import device_util
+from tensorflow.python.distribute import distribute_lib
+from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.distribute import input_ops
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.eager import context
@@ -42,9 +45,6 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gen_resource_variable_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope as vs
-from tensorflow.python.training import device_util
-from tensorflow.python.training import distribute as distribute_lib
-from tensorflow.python.training import distribution_strategy_context
 from tensorflow.python.training import saver
 from tensorflow.python.training.checkpointable import base as checkpointable
 from tensorflow.python.util import nest
@@ -1433,7 +1433,7 @@ class InputFunctionIterator(InputIteratorImpl):
       # TODO(priyag): We should probably explicitly specify CPU device on worker.
       with ops.device(worker):
         result = input_fn(ctx)
-        if not isinstance(result, dataset_ops.Dataset):
+        if not isinstance(result, dataset_ops.DatasetV2):
           raise ValueError("input_fn must return a tf.data.Dataset.")
         iterator = _SingleWorkerDatasetIterator(result, worker, devices)
         iterators.append(iterator)

@@ -27,7 +27,10 @@ from tensorflow.contrib.distribute.python import combinations
 from tensorflow.contrib.distribute.python import mirrored_strategy
 from tensorflow.contrib.distribute.python import multi_worker_test_base
 from tensorflow.contrib.distribute.python import strategy_test_lib
+from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.distribute import device_util
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
 from tensorflow.python.eager import backprop
@@ -47,8 +50,6 @@ from tensorflow.python.ops import rnn_cell_impl
 from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.training import device_util
-from tensorflow.python.training import distribution_strategy_context as ds_context
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import optimizer as optimizer_lib
 from tensorflow.python.training import server_lib
@@ -1371,6 +1372,15 @@ class MultiWorkerMirroredStrategyTest(
       iterator = distribution.make_input_fn_iterator(input_fn)
       self._test_input_fn_iterator(
           iterator, distribution.extended.worker_devices, expected_values, sess)
+
+  def testUpdateConfigProto(self, distribution):
+    distribution.configure(cluster_spec={"worker": ["fake1", "fake2"]})
+
+    config_proto = config_pb2.ConfigProto()
+    new_config = distribution.update_config_proto(config_proto)
+
+    # Verify isolate_session_state
+    self.assertTrue(new_config.isolate_session_state)
 
 
 class MultiWorkerMirroredStrategyTestWithChief(

@@ -19,11 +19,14 @@ from __future__ import division
 from __future__ import print_function
 
 import contextlib
+import copy
 import functools
 import threading
 
 from tensorflow.python import pywrap_tensorflow
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
+from tensorflow.python.distribute import device_util
+from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import shared_variable_creator
@@ -39,8 +42,6 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import coordinator
-from tensorflow.python.training import device_util
-from tensorflow.python.training import distribute as distribute_lib
 from tensorflow.python.util import nest
 
 
@@ -562,7 +563,7 @@ class MirroredExtended(distribute_lib.DistributionStrategyExtended):
     del task_type, task_id
 
     if session_config:
-      session_config.isolate_session_state = True
+      session_config.CopyFrom(self._update_config_proto(session_config))
 
     if cluster_spec:
       self._initialize_multi_worker(self._num_gpus, cluster_spec)
@@ -582,6 +583,11 @@ class MirroredExtended(distribute_lib.DistributionStrategyExtended):
       else:
         self._cross_device_ops = cross_device_ops_lib.choose_the_best(
             self._devices, session_config=session_config)
+
+  def _update_config_proto(self, config_proto):
+    updated_config = copy.deepcopy(config_proto)
+    updated_config.isolate_session_state = True
+    return updated_config
 
   def _get_cross_device_ops(self):
     if self._cross_device_ops is None:
