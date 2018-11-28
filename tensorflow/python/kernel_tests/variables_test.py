@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import operator
 
 import numpy as np
@@ -227,13 +228,13 @@ class VariablesTestCase(test.TestCase):
       self.assertEqual([2], self.evaluate(v2))
       # v0 should still be uninitialized.
       with self.assertRaisesRegexp(errors_impl.OpError, "uninitialized"):
-        sess.run(v0)
+        self.evaluate(v0)
       # We should not be able to run 'add' yet.
       with self.assertRaisesRegexp(errors_impl.OpError, "uninitialized"):
-        sess.run(add)
+        self.evaluate(add)
       # If we initialize v0 we should be able to run 'add'.
       self.evaluate(v0.initializer)
-      sess.run(add)
+      self.evaluate(add)
 
   def testControlFlowInitialization(self):
     """Expects an error if an initializer is in a control-flow scope."""
@@ -308,6 +309,12 @@ class VariablesTestCase(test.TestCase):
       self.assertEqual([var_x, var_y], variables.trainable_variables())
       self.assertEqual([var_x], variables.trainable_variables("scope_1"))
       self.assertEqual([var_y], variables.trainable_variables("scope_2"))
+
+  def testOperatorWrapping(self):
+    for attr in functools.WRAPPER_ASSIGNMENTS:
+      self.assertEqual(
+          getattr(variables.Variable.__add__, attr),
+          getattr(ops.Tensor.__add__, attr))
 
   def testOperators(self):
     with self.cached_session():
@@ -469,11 +476,11 @@ class VariablesTestCase(test.TestCase):
     with ops.Graph().as_default(), self.cached_session() as sess:
       # v describes a VariableDef-based variable without an initial value.
       v = variables.Variable(variable_def=v_def)
-      self.assertEqual(3.0, sess.run(v.initialized_value()))
+      self.assertEqual(3.0, self.evaluate(v.initialized_value()))
 
       # initialized_value should not rerun the initializer_op if the variable
       # has already been initialized elsewhere.
-      sess.run(v.assign(1.0))
+      self.evaluate(v.assign(1.0))
       self.assertEqual(1.0, v.initialized_value().eval())
 
     v_def.ClearField("initial_value_name")
@@ -485,7 +492,7 @@ class VariablesTestCase(test.TestCase):
       self.assertProtoEquals(v_def, v.to_proto())
       # But attempts to use initialized_value will result in errors.
       with self.assertRaises(ValueError):
-        sess.run(v.initialized_value())
+        self.evaluate(v.initialized_value())
 
   def testTrainableInProto(self):
     with ops.Graph().as_default():
@@ -572,7 +579,7 @@ class IsInitializedTest(test.TestCase):
       variables.global_variables_initializer().run()
       do_opt = gradient_descent.GradientDescentOptimizer(0.1).minimize(
           objective)
-      sess.run([do_opt])
+      self.evaluate([do_opt])
       self.assertAllClose([[0.9, 0.9], [0.9, 0.9]], self.evaluate(b))
 
 
@@ -589,9 +596,9 @@ class ObsoleteIsInitializedTest(test.TestCase):
       _ = v, w
       inited = variables.assert_variables_initialized()
       with self.assertRaisesOpError("Attempting to use uninitialized value"):
-        sess.run(inited)
+        self.evaluate(inited)
       variables.global_variables_initializer().run()
-      sess.run(inited)
+      self.evaluate(inited)
 
   def testVariableList(self):
     with ops.Graph().as_default(), self.cached_session() as sess:

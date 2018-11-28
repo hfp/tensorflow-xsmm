@@ -116,6 +116,22 @@ class TestUpgrade(test_util.TensorFlowTestCase):
       self.assertEqual(errors, ["test.py:1: %s requires manual check." % ns])
       self.assertIn("loss_reduction has been changed", report)
 
+  def testDropout(self):
+    text = "tf.nn.dropout(x, keep_prob, name=\"foo\")\n"
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(
+        new_text,
+        "tf.nn.dropout(x, 1 - keep_prob, name=\"foo\")\n",
+    )
+
+    text = "tf.nn.dropout(x)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, text)
+    self.assertEqual(
+        errors,
+        ["test.py:1: tf.nn.dropout requires manual check."]
+    )
+
   def testCountNonZeroChanges(self):
     text = (
         "tf.math.count_nonzero(input_tensor=input, dtype=dtype, name=name, "
@@ -160,6 +176,69 @@ class TestUpgrade(test_util.TensorFlowTestCase):
         "strides=strides, dilations=dilation_rate, name=name, "
         "data_format=data_format)"
     )
+    self.assertEqual(new_text, expected_text)
+
+  def testColocateGradientsWithOps(self):
+    text = "tf.gradients(a, foo=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors, [])
+
+    text = "tf.gradients(a, colocate_gradients_with_ops=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors, ["test.py:1: tf.gradients requires manual check."])
+
+    text = "optimizer.minimize(a, foo=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors, [])
+
+    text = "optimizer.minimize(a, colocate_gradients_with_ops=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors,
+                     ["test.py:1: Optimizer.minimize requires manual check."])
+
+    text = "optimizer.compute_gradients(a, foo=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors, [])
+
+    text = "optimizer.compute_gradients(a, colocate_gradients_with_ops=False)\n"
+    _, unused_report, errors, new_text = self._upgrade(text)
+    self.assertEqual(text, new_text)
+    self.assertEqual(errors,
+                     ["test.py:1: Optimizer.compute_gradients "
+                      "requires manual check."])
+
+  def testExportSavedModelRename(self):
+    text = "self.est.export_savedmodel(path)"
+    _, report, unused_errors, unused_new_text = self._upgrade(text)
+    self.assertIn(
+        "rename the function export_savedmodel() to export_saved_model()",
+        report)
+
+  def testArgmin(self):
+    text = "tf.argmin(input, name=n, dimension=1, output_type=type)"
+    expected_text = "tf.argmin(input=input, name=n, axis=1, output_type=type)"
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+    text = "tf.argmin(input, 0)"
+    expected_text = "tf.argmin(input=input, axis=0)"
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testArgmax(self):
+    text = "tf.argmax(input, name=n, dimension=1, output_type=type)"
+    expected_text = "tf.argmax(input=input, name=n, axis=1, output_type=type)"
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+    text = "tf.argmax(input, 0)"
+    expected_text = "tf.argmax(input=input, axis=0)"
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
     self.assertEqual(new_text, expected_text)
 
 

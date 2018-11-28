@@ -1221,7 +1221,7 @@ void GetOutputNamesFromNodeDef(const NodeDef& node,
 void GetOutputTypesFromNodeDef(const NodeDef& node,
                                const tensorflow::OpDef& op_def,
                                TensorFlowUnsupportedOperator* op) {
-  // The the given type to the op, or clear the types if invalid.
+  // The given type to the op, or clear the types if invalid.
   auto add_type = [&node, op](tensorflow::DataType type) {
     if (type == tensorflow::DT_INVALID) {
       LOG(WARNING) << "Op node missing output type attribute: " << node.name();
@@ -2012,13 +2012,13 @@ bool InlineAllFunctions(GraphDef* graphdef) {
   tensorflow::SessionOptions options;
   auto* device_count = options.config.mutable_device_count();
   device_count->insert({"CPU", 1});
-  std::vector<tensorflow::Device*> devices;
+  std::vector<std::unique_ptr<tensorflow::Device>> devices;
   TF_CHECK_OK(tensorflow::DeviceFactory::AddDevices(
       options, "/job:localhost/replica:0/task:0", &devices));
 
   tensorflow::FunctionLibraryDefinition fld(tensorflow::OpRegistry::Global(),
                                             graphdef_copy.library());
-  tensorflow::DeviceMgr device_mgr(devices);
+  tensorflow::DeviceMgr device_mgr(std::move(devices));
   tensorflow::OptimizerOptions o_opts;
   tensorflow::ProcessFunctionLibraryRuntime pflr(
       &device_mgr, tensorflow::Env::Default(), TF_GRAPH_DEF_VERSION, &fld,

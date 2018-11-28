@@ -113,10 +113,6 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "LooperThread"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "MomentumOptimizer"
     mtype: "<type \'type\'>"
   }
@@ -210,10 +206,6 @@ tf_module {
   }
   member {
     name: "Supervisor"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "VocabInfo"
     mtype: "<type \'type\'>"
   }
   member {

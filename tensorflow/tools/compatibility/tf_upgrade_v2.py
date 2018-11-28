@@ -31,6 +31,12 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     # Maps from a function name to a dictionary that describes how to
     # map from an old argument keyword to the new argument keyword.
     self.function_keyword_renames = {
+        "tf.argmin": {
+            "dimension": "axis",
+        },
+        "tf.argmax": {
+            "dimension": "axis",
+        },
         "tf.image.crop_and_resize": {
             "box_ind": "box_indices",
         },
@@ -77,6 +83,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.sparse.split": {
             "split_dim": "axis",
         },
+        "tf.max_pool_with_argmax": {
+            "Targmax": "output_dtype",
+        },
         "tf.multinomial": {
             "output_dtype": "dtype",
         },
@@ -90,6 +99,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         },
         "tf.manip.batch_to_space_nd": {
             "block_size": "block_shape",
+        },
+        "tf.nn.dilation2d": {
+            "filter": "filters",
+            "rates": "dilations",
         },
         "tf.nn.conv3d": {
             "filter": "filters"
@@ -246,71 +259,142 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     # function_reorders or function_keyword_renames, use the OLD function name.
     # These renames happen after the arguments have been processed.
     self.symbol_renames.update({
-        "tf.batch_to_space_nd": "tf.batch_to_space",
-        "tf.gfile.Copy": "tf.io.gfile.Copy",
-        "tf.gfile.DeleteRecursively": "tf.io.gfile.DeleteRecursively",
-        "tf.gfile.Exists": "tf.io.gfile.Exists",
-        "tf.gfile.Glob": "tf.io.gfile.Glob",
-        "tf.gfile.IsDirectory": "tf.io.gfile.IsDirectory",
-        "tf.gfile.ListDirectory": "tf.io.gfile.ListDirectory",
-        "tf.gfile.MakeDirs": "tf.io.gfile.MakeDirs",
-        "tf.gfile.MkDir": "tf.io.gfile.MkDir",
-        "tf.gfile.Remove": "tf.io.gfile.Remove",
-        "tf.gfile.Rename": "tf.io.gfile.Rename",
-        "tf.gfile.Stat": "tf.io.gfile.Stat",
-        "tf.gfile.Walk": "tf.io.gfile.Walk",
-        "tf.contrib.data.AUTOTUNE": "tf.data.experimental.AUTOTUNE",
-        "tf.contrib.data.Counter": "tf.data.experimental.Counter",
-        "tf.contrib.data.CheckpointInputPipelineHook": "tf.data.experimental.CheckpointInputPipelineHook",
-        "tf.contrib.data.CsvDataset": "tf.data.experimental.CsvDataset",
-        "tf.contrib.data.Optional": "tf.data.experimental.Optional",
-        "tf.contrib.data.RandomDataset": "tf.data.experimental.RandomDataset",
-        "tf.contrib.data.Reducer": "tf.data.experimental.Reducer",
-        "tf.contrib.data.SqlDataset": "tf.data.experimental.SqlDataset",
-        "tf.contrib.data.StatsAggregator": "tf.data.experimental.StatsAggregator",
-        "tf.contrib.data.TFRecordWriter": "tf.data.experimental.TFRecordWriter",
-        "tf.contrib.data.assert_element_shape": "tf.data.experimental.assert_element_shape",
-        "tf.contrib.data.batch_and_drop_remainder": "tf.compat.v1.contrib.data.batch_and_drop_remainder",
-        "tf.contrib.data.bucket_by_sequence_length": "tf.data.experimental.bucket_by_sequence_length",
-        "tf.contrib.data.choose_from_datasets": "tf.data.experimental.choose_from_datasets",
-        "tf.contrib.data.copy_to_device": "tf.data.experimental.copy_to_device",
-        "tf.contrib.data.dense_to_sparse_batch": "tf.data.experimental.dense_to_sparse_batch",
-        "tf.contrib.data.enumerate_dataset": "tf.data.experimental.enumerate_dataset",
-        "tf.contrib.data.get_next_as_optional": "tf.data.experimental.get_next_as_optional",
-        "tf.contrib.data.get_single_element": "tf.data.experimental.get_single_element",
-        "tf.contrib.data.group_by_reducer": "tf.data.experimental.group_by_reducer",
-        "tf.contrib.data.group_by_window": "tf.data.experimental.group_by_window",
-        "tf.contrib.data.ignore_errors": "tf.data.experimental.ignore_errors",
-        "tf.contrib.data.latency_stats": "tf.data.experimental.latency_stats",
-        "tf.contrib.data.make_batched_features_dataset": "tf.data.experimental.make_batched_features_dataset",
-        "tf.contrib.data.make_csv_dataset": "tf.data.experimental.make_csv_dataset",
-        "tf.contrib.data.make_saveable_from_iterator": "tf.data.experimental.make_saveable_from_iterator",
-        "tf.contrib.data.map_and_batch": "tf.data.experimental.map_and_batch",
-        "tf.contrib.data.padded_batch_and_drop_remainder": "tf.compat.v1.contrib.data.padded_batch_and_drop_remainder",
-        "tf.contrib.data.parallel_interleave": "tf.data.experimental.parallel_interleave",
-        "tf.contrib.data.parse_example_dataset": "tf.data.experimental.parse_example_dataset",
-        "tf.contrib.data.prefetch_to_device": "tf.data.experimental.prefetch_to_device",
-        "tf.contrib.data.read_batch_features": "tf.compat.v1.contrib.data.read_batch_features",
-        "tf.contrib.data.reduce_dataset": "tf.compat.v1.contrib.data.reduce_dataset",
-        "tf.contrib.data.rejection_resample": "tf.data.experimental.rejection_resample",
-        "tf.contrib.data.sample_from_datasets": "tf.data.experimental.sample_from_datasets",
-        "tf.contrib.data.scan": "tf.data.experimental.scan",
-        "tf.contrib.data.set_stats_aggregator": "tf.data.experimental.set_stats_aggregator",
-        "tf.contrib.data.shuffle_and_repeat": "tf.data.experimental.shuffle_and_repeat",
-        "tf.contrib.data.sliding_window_batch": "tf.compat.v1.contrib.data.sliding_window_batch",
-        "tf.contrib.data.sloppy_interleave": "tf.compat.v1.contrib.data.sloppy_interleave",
-        "tf.contrib.data.unbatch": "tf.data.experimental.unbatch",
-        "tf.contrib.data.unique": "tf.data.experimental.unique",
-        "tf.contrib.framework.sort": "tf.sort",
-        "tf.contrib.framework.argsort": "tf.argsort",
-        "tf.manip.batch_to_space_nd": "tf.batch_to_space",
-        "tf.quantize_v2": "tf.quantization.quantize",
-        "tf.sparse_concat": "tf.sparse.concat",
-        "tf.sparse_split": "tf.sparse.split",
-        "tf.multinomial": "tf.random.categorical",
-        "tf.random.multinomial": "tf.random.categorical",
-        "tf.load_file_system_library": "tf.load_library",
-        "tf.pywrap_tensorflow": "tf.compat.v1.pywrap_tensorflow",
+        "tf.batch_to_space_nd":
+            "tf.batch_to_space",
+        "tf.gfile.Copy":
+            "tf.io.gfile.Copy",
+        "tf.gfile.DeleteRecursively":
+            "tf.io.gfile.DeleteRecursively",
+        "tf.gfile.Exists":
+            "tf.io.gfile.Exists",
+        "tf.gfile.Glob":
+            "tf.io.gfile.Glob",
+        "tf.gfile.IsDirectory":
+            "tf.io.gfile.IsDirectory",
+        "tf.gfile.ListDirectory":
+            "tf.io.gfile.ListDirectory",
+        "tf.gfile.MakeDirs":
+            "tf.io.gfile.MakeDirs",
+        "tf.gfile.MkDir":
+            "tf.io.gfile.MkDir",
+        "tf.gfile.Remove":
+            "tf.io.gfile.Remove",
+        "tf.gfile.Rename":
+            "tf.io.gfile.Rename",
+        "tf.gfile.Stat":
+            "tf.io.gfile.Stat",
+        "tf.gfile.Walk":
+            "tf.io.gfile.Walk",
+        "tf.contrib.data.AUTOTUNE":
+            "tf.data.experimental.AUTOTUNE",
+        "tf.contrib.data.Counter":
+            "tf.data.experimental.Counter",
+        "tf.contrib.data.CheckpointInputPipelineHook":
+            "tf.data.experimental.CheckpointInputPipelineHook",
+        "tf.contrib.data.CsvDataset":
+            "tf.data.experimental.CsvDataset",
+        "tf.contrib.data.Optional":
+            "tf.data.experimental.Optional",
+        "tf.contrib.data.RandomDataset":
+            "tf.data.experimental.RandomDataset",
+        "tf.contrib.data.Reducer":
+            "tf.data.experimental.Reducer",
+        "tf.contrib.data.SqlDataset":
+            "tf.data.experimental.SqlDataset",
+        "tf.contrib.data.StatsAggregator":
+            "tf.data.experimental.StatsAggregator",
+        "tf.contrib.data.TFRecordWriter":
+            "tf.data.experimental.TFRecordWriter",
+        "tf.contrib.data.assert_element_shape":
+            "tf.data.experimental.assert_element_shape",
+        "tf.contrib.data.batch_and_drop_remainder":
+            "tf.compat.v1.contrib.data.batch_and_drop_remainder",
+        "tf.contrib.data.bucket_by_sequence_length":
+            "tf.data.experimental.bucket_by_sequence_length",
+        "tf.contrib.data.choose_from_datasets":
+            "tf.data.experimental.choose_from_datasets",
+        "tf.contrib.data.copy_to_device":
+            "tf.data.experimental.copy_to_device",
+        "tf.contrib.data.dense_to_sparse_batch":
+            "tf.data.experimental.dense_to_sparse_batch",
+        "tf.contrib.data.enumerate_dataset":
+            "tf.data.experimental.enumerate_dataset",
+        "tf.contrib.data.get_next_as_optional":
+            "tf.data.experimental.get_next_as_optional",
+        "tf.contrib.data.get_single_element":
+            "tf.data.experimental.get_single_element",
+        "tf.contrib.data.group_by_reducer":
+            "tf.data.experimental.group_by_reducer",
+        "tf.contrib.data.group_by_window":
+            "tf.data.experimental.group_by_window",
+        "tf.contrib.data.ignore_errors":
+            "tf.data.experimental.ignore_errors",
+        "tf.contrib.data.latency_stats":
+            "tf.data.experimental.latency_stats",
+        "tf.contrib.data.make_batched_features_dataset":
+            "tf.data.experimental.make_batched_features_dataset",
+        "tf.contrib.data.make_csv_dataset":
+            "tf.data.experimental.make_csv_dataset",
+        "tf.contrib.data.make_saveable_from_iterator":
+            "tf.data.experimental.make_saveable_from_iterator",
+        "tf.contrib.data.map_and_batch":
+            "tf.data.experimental.map_and_batch",
+        "tf.contrib.data.padded_batch_and_drop_remainder":
+            "tf.compat.v1.contrib.data.padded_batch_and_drop_remainder",
+        "tf.contrib.data.parallel_interleave":
+            "tf.data.experimental.parallel_interleave",
+        "tf.contrib.data.parse_example_dataset":
+            "tf.data.experimental.parse_example_dataset",
+        "tf.contrib.data.prefetch_to_device":
+            "tf.data.experimental.prefetch_to_device",
+        "tf.contrib.data.read_batch_features":
+            "tf.compat.v1.contrib.data.read_batch_features",
+        "tf.contrib.data.reduce_dataset":
+            "tf.compat.v1.contrib.data.reduce_dataset",
+        "tf.contrib.data.rejection_resample":
+            "tf.data.experimental.rejection_resample",
+        "tf.contrib.data.sample_from_datasets":
+            "tf.data.experimental.sample_from_datasets",
+        "tf.contrib.data.scan":
+            "tf.data.experimental.scan",
+        "tf.contrib.data.set_stats_aggregator":
+            "tf.data.experimental.set_stats_aggregator",
+        "tf.contrib.data.shuffle_and_repeat":
+            "tf.data.experimental.shuffle_and_repeat",
+        "tf.contrib.data.sliding_window_batch":
+            "tf.compat.v1.contrib.data.sliding_window_batch",
+        "tf.contrib.data.sloppy_interleave":
+            "tf.compat.v1.contrib.data.sloppy_interleave",
+        "tf.contrib.data.unbatch":
+            "tf.data.experimental.unbatch",
+        "tf.contrib.data.unique":
+            "tf.data.experimental.unique",
+        "tf.contrib.framework.sort":
+            "tf.sort",
+        "tf.contrib.framework.argsort":
+            "tf.argsort",
+        "tf.manip.batch_to_space_nd":
+            "tf.batch_to_space",
+        "tf.quantize_v2":
+            "tf.quantization.quantize",
+        "tf.sparse_concat":
+            "tf.sparse.concat",
+        "tf.sparse_split":
+            "tf.sparse.split",
+        "tf.multinomial":
+            "tf.random.categorical",
+        "tf.random.multinomial":
+            "tf.random.categorical",
+        "tf.load_file_system_library":
+            "tf.load_library",
+        "tf.pywrap_tensorflow":
+            "tf.compat.v1.pywrap_tensorflow",
+        "tf.bincount":
+            "tf.math.bincount",
+        "tf.confusion_matrix":
+            "tf.math.confusion_matrix",
+        "tf.train.confusion_matrix":
+            "tf.math.confusion_matrix",
     })
     # pylint: enable=line-too-long
 
@@ -330,8 +414,8 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     self.function_reorders = {
         "tf.io.serialize_sparse": ["sp_input", "name", "out_type"],
         "tf.io.serialize_many_sparse": ["sp_input", "name", "out_type"],
-        "tf.argmax": ["input", "axis", "name", "dimension", "output_type"],
-        "tf.argmin": ["input", "axis", "name", "dimension", "output_type"],
+        "tf.argmax": ["input", "axis", "name", "axis", "output_type"],
+        "tf.argmin": ["input", "axis", "name", "axis", "output_type"],
         "tf.batch_to_space": ["input", "crops", "block_size", "name"],
         "tf.boolean_mask": ["tensor", "mask", "name", "axis"],
         "tf.convert_to_tensor": ["value", "dtype", "name", "preferred_dtype"],
@@ -380,9 +464,13 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "data", "indices", "segment_ids", "name", "num_segments"
         ],
         "tf.io.decode_csv": [
-            "records", "record_defaults",
-            "field_delim", "use_quote_delim",
-            "name", "na_value", "select_cols",
+            "records",
+            "record_defaults",
+            "field_delim",
+            "use_quote_delim",
+            "name",
+            "na_value",
+            "select_cols",
         ],
         "tf.strings.substr": ["input", "pos", "len", "name", "unit"],
         "tf.strings.reduce_join": [
@@ -471,10 +559,22 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "input", "axis", "keep_dims", "separator", "name",
             "reduction_indices"
         ],
+        "tf.confusion_matrix": [
+            "labels", "predictions", "num_classes", "dtype", "name", "weights"
+        ],
+        "tf.math.confusion_matrix": [
+            "labels", "predictions", "num_classes", "dtype", "name", "weights"
+        ]
     }
 
     # Specially handled functions.
-    self.function_handle = {}
+    self.function_handle = {
+        "tf.nn.dropout": self._dropout_handler,
+        "tf.gradients": self._colocate_handler("tf.gradients"),
+        "*.minimize": self._colocate_handler("Optimizer.minimize"),
+        "*.compute_gradients":
+            self._colocate_handler("Optimizer.compute_gradients"),
+    }
 
     decay_function_comment = (
         "ERROR: <function name> has been changed to return a callable instead "
@@ -582,6 +682,65 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         for name, new_name in self.symbol_renames.items()
         if name not in self.function_warnings and name not in excluded_renames
     }
+
+    export_saved_model_renamed = (
+        "(Manual edit required) Please rename the function export_savedmodel() "
+        "to export_saved_model(). Two things to note:\n\t(1) The argument "
+        "strip_default_attributes has been removed. The function will always "
+        "strip the default attributes from ops. If this breaks your code, "
+        "please switch to tf.compat.v1.estimator.Estimator.\n\t(2) This change "
+        "only effects core estimator. If you are using "
+        "tf.contrib.learn.Estimator, please switch to using core estimator.")
+
+    # Specify warnings for functions that aren't restricted to the tf.x.y.z
+    # format. This should only be used for methods with unique names, e.g.
+    # export_savedmodel, which is only defined in Estimator objects.
+    self.unrestricted_function_warnings = {
+        "export_savedmodel": export_saved_model_renamed,
+    }
+
+  @staticmethod
+  def _dropout_handler(file_edit_recorder, node):
+    if len(node.args) < 2:
+      comment = ("ERROR: tf.nn.dropout did not take arguments, so automatic "
+                 "transformation was disabled. tf.nn.dropout has changed "
+                 "the semantics of the second argument.")
+      file_edit_recorder.add(
+          comment,
+          node.lineno,
+          node.col_offset,
+          "tf.nn.dropout",
+          "tf.nn.dropout",
+          error="tf.nn.dropout requires manual check.")
+    else:
+      comment = ("WARNING: tf.nn.dropout has changed the semantics of the "
+                 "second argument. Please check the transformation.\n")
+      file_edit_recorder.add(
+          comment,
+          node.args[1].lineno,
+          node.args[1].col_offset,
+          "",
+          "1 - ")
+
+  @staticmethod
+  def _colocate_handler(name):
+    def _helper(file_edit_recorder, node):
+      for keyword in node.keywords:
+        if keyword.arg == "colocate_gradients_with_ops":
+          # TODO(jhseu): Since ast_edit.py does string replacement, there's no
+          # straightforward way to remove the argument. Try to fix before 2.0 is
+          # final.
+          comment = ("For tf.gradients and tf.Optimizer.minimize, "
+                     "colocate_gradients_with_op has been removed and now "
+                     "defaults to True.")
+          file_edit_recorder.add(
+              comment,
+              node.lineno,
+              node.col_offset,
+              "",
+              "",
+              error="{} requires manual check.".format(name))
+    return _helper
 
 
 if __name__ == "__main__":

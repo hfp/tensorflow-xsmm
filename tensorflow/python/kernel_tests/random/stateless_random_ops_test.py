@@ -24,6 +24,7 @@ import numpy as np
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import random_seed
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import stateless_random_ops as stateless
@@ -58,11 +59,11 @@ class StatelessOpsTest(test.TestCase):
       preseed = invert_philox(key, (seed[0], 0, seed[1], 0)).astype(np.uint64)
       preseed = preseed[::2] | preseed[1::2] << 32
       random_seed.set_random_seed(seed[0])
-      with self.test_session(use_gpu=True):
+      with test_util.use_gpu():
         for stateless_op, stateful_op in cases:
           stateful = stateful_op(seed=seed[1])
           pure = stateless_op(seed=preseed)
-          self.assertAllEqual(stateful.eval(), self.evaluate(pure))
+          self.assertAllEqual(self.evaluate(stateful), self.evaluate(pure))
 
   def _test_determinism(self, cases):
     # Stateless values should be equal iff the seeds are equal (roughly)

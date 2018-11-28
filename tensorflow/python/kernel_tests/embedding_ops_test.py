@@ -294,7 +294,7 @@ class EmbeddingLookupTest(test.TestCase):
       variables.global_variables_initializer().run()
       params_values = [params[p_i.name] for p_i in p]
       # Test that the PartitionedVariable components equal the list in p
-      p_var_val = sess.run(list(p_variable))
+      p_var_val = self.evaluate(list(p_variable))
       # Actual test
       tf_result = embedding.eval(feed_dict=feed_dict)
     np_result, _, _ = _EmbeddingResult(params, id_vals, num_shards, vocab_size)
@@ -316,7 +316,7 @@ class EmbeddingLookupTest(test.TestCase):
       variables.global_variables_initializer().run()
       params_values = [params[p_i.name] for p_i in p]
       # Test that the PartitionedVariable components equal the list in p
-      p_var_val = sess.run(list(p_variable))
+      p_var_val = self.evaluate(list(p_variable))
       # Actual test
       print(ops.get_default_graph().as_graph_def())
       tf_result = self.evaluate(embedding)
@@ -758,11 +758,13 @@ class SafeEmbeddingLookupSparseTest(test.TestCase):
     assert num_shards > 0
     assert num_shards <= vocab_size
 
-    embedding_weights = partitioned_variables.create_partitioned_variables(
+    initializer = init_ops.truncated_normal_initializer(
+        mean=0.0, stddev=1.0 / math.sqrt(vocab_size), dtype=dtypes.float32)
+    embedding_weights = list(variable_scope.get_variable(
+        name="embedding_weights",
         shape=[vocab_size, embed_dim],
-        slicing=[num_shards, 1],
-        initializer=init_ops.truncated_normal_initializer(
-            mean=0.0, stddev=1.0 / math.sqrt(vocab_size), dtype=dtypes.float32))
+        partitioner=partitioned_variables.fixed_size_partitioner(num_shards),
+        initializer=initializer))
     for w in embedding_weights:
       w.initializer.run()
     embedding_weights = [w.eval() for w in embedding_weights]
