@@ -96,6 +96,7 @@ load("//tensorflow:tensorflow.bzl", "tf_cc_tests_gpu")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_version_info_genrule")
 load("//tensorflow:tensorflow.bzl", "if_nccl")
+load("//tensorflow:tensorflow.bzl", "tensorflow_opensource_extra_deps")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_only_cc_test")
 
 # For platform specific build config
@@ -911,6 +912,7 @@ tf_cuda_library(
         "util/bcast.h",
         "util/cuda_kernel_helper.h",
         "util/device_name_utils.h",
+        "util/dump_graph.h",
         "util/events_writer.h",
         "util/example_proto_fast_parsing.h",
         "util/example_proto_helper.h",
@@ -1468,7 +1470,7 @@ tf_cuda_library(
         ":gpu_runtime",
         ":lib",
         ":ops",
-    ],
+    ] + tensorflow_opensource_extra_deps(),
 )
 
 cc_library(
@@ -2679,6 +2681,7 @@ tf_cuda_library(
         ":version_lib",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings",
         "//tensorflow/core/platform/default/build_config:platformlib",
         "//tensorflow/core/kernels:bounds_check",
         "//third_party/eigen3",
@@ -3730,6 +3733,7 @@ tf_cc_tests(
         "util/bcast_test.cc",
         "util/command_line_flags_test.cc",
         "util/device_name_utils_test.cc",
+        "util/dump_graph_test.cc",
         "util/equal_graph_def_test.cc",
         "util/events_writer_test.cc",
         "util/example_proto_fast_parsing_test.cc",

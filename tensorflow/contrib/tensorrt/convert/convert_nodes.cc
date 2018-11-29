@@ -130,7 +130,7 @@ void GetOutputProperties(const grappler::GraphProperties& graph_properties,
     *dtype = out_shape.dtype();
     *shape = out_shape.shape();
   } else {
-    VLOG(0) << "Unknown output shape" << node->name();
+    LOG(INFO) << "Unknown output shape" << node->name();
     *dtype = node->output_type(out_port);
   }
 }
@@ -181,7 +181,7 @@ Status ValidateTensorProperties(const string& producer_node_type,
     if (shape.dim_size(d) < 0) {
       return errors::InvalidArgument(
           "Input tensor with shape ", shape.DebugString(),
-          " has an unknown non-batch dimemension at dim ", d);
+          " has an unknown non-batch dimension at dim ", d);
     }
   }
   return Status::OK();
@@ -2496,6 +2496,48 @@ tensorflow::Status ConvertUnary(OpConverterParams* params) {
   return tensorflow::Status::OK();
 }
 
+tensorflow::Status ConvertSquare(OpConverterParams* params) {
+  const auto& inputs = params->inputs;
+  const auto& node_def = params->node_def;
+  if (inputs.size() != 1) {
+    return tensorflow::errors::InvalidArgument("Square expects one input, at ",
+                                               node_def.name());
+  }
+  if (inputs.at(0).is_weights()) {
+    return tensorflow::errors::Unimplemented(
+        "Square is only implemented for tensors, at ", node_def.name());
+  }
+  if (params->validation_only) return Status::OK();
+
+  // Constant 2 with same rank as input
+  nvinfer1::Dims dims = inputs.at(0).GetTrtDims();
+  for (int i = 0; i < dims.nbDims; i++) {
+    dims.d[i] = 1;
+  }
+  TRT_ShapedWeights weights = params->weight_store->GetTempWeights(
+      tensorflow::DataType::DT_FLOAT, dims);
+  auto weights_ptr =
+      static_cast<float*>(const_cast<void*>(weights.GetValues()));
+  weights_ptr[0] = 2.f;
+  nvinfer1::IConstantLayer* const2_layer =
+      params->converter->network()->addConstant(dims, weights.GetTrtWeights());
+  TFTRT_RETURN_ERROR_IF_NULLPTR(const2_layer, node_def.name());
+
+  // ElementWise Pow Operation
+  const nvinfer1::ITensor* tensor_l = inputs.at(0).tensor();
+  const nvinfer1::ITensor* tensor_r = const2_layer->getOutput(0);
+  nvinfer1::IElementWiseLayer* layer =
+      params->converter->network()->addElementWise(
+          *const_cast<nvinfer1::ITensor*>(tensor_l),
+          *const_cast<nvinfer1::ITensor*>(tensor_r),
+          nvinfer1::ElementWiseOperation::kPOW);
+  TFTRT_RETURN_ERROR_IF_NULLPTR(layer, node_def.name());
+  nvinfer1::ITensor* output_tensor = layer->getOutput(0);
+
+  params->outputs->push_back(TRT_TensorOrWeights(output_tensor));
+  return tensorflow::Status::OK();
+}
+
 tensorflow::Status ConvertReduce(OpConverterParams* params) {
   const auto& inputs = params->inputs;
   const auto& node_def = params->node_def;
@@ -3083,6 +3125,7 @@ static void RegisterValidatableOpConverters(
   (*registration)["Reshape"] = ConvertReshape;
   (*registration)["MatMul"] = ConvertMatMul;
   (*registration)["Relu6"] = ConvertRelu6;
+  (*registration)["Square"] = ConvertSquare;
 
   for (auto quantization_op_type :
        {"QuantizeAndDequantizeV2", "QuantizeAndDequantizeV3",
@@ -3378,7 +3421,8 @@ tensorflow::Status ConvertSegmentToGraphDef(
     }
   }
   *common_scope = local_scope;
-  VLOG(0) << "Segment @scope '" << local_scope << "', converted to graph";
+  VLOG(1) << "Converted TensorRT candidate segment @scope '" << local_scope
+          << "' to a GraphDef";
   return tensorflow::Status::OK();
 }
 

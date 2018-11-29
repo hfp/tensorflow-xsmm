@@ -1036,12 +1036,12 @@ def convert_to_tensor(value, dtype=None, name=None, preferred_dtype=None):
       `preferred_dtype` is not possible, this argument has no effect.
 
   Returns:
-    An `Output` based on `value`.
+    An `Tensor` based on `value`.
 
   Raises:
-    TypeError: If no conversion function is registered for `value`.
+    TypeError: If no conversion function is registered for `value` to `dtype`.
     RuntimeError: If a registered conversion function returns an invalid value.
-
+    ValueError: If the `value` is a tensor not of given `dtype` in graph mode.
   """
   return convert_to_tensor_v2(value, dtype, preferred_dtype, name)
 
@@ -1089,12 +1089,12 @@ def convert_to_tensor_v2(value, dtype=None, dtype_hint=None, name=None):
     name: Optional name to use if a new `Tensor` is created.
 
   Returns:
-    An `Output` based on `value`.
+    An `Tensor` based on `value`.
 
   Raises:
-    TypeError: If no conversion function is registered for `value`.
+    TypeError: If no conversion function is registered for `value` to `dtype`.
     RuntimeError: If a registered conversion function returns an invalid value.
-
+    ValueError: If the `value` is a tensor not of given `dtype` in graph mode.
   """
   return internal_convert_to_tensor(
       value=value,
@@ -1115,42 +1115,7 @@ def internal_convert_to_tensor(value,
                                preferred_dtype=None,
                                ctx=None,
                                accept_symbolic_tensors=True):
-  """Converts the given `value` to an `Tensor`.
-
-  This function converts Python objects of various types to `Tensor`
-  objects. It accepts `Tensor` objects, numpy arrays, Python lists,
-  and Python scalars. For example:
-
-  This function can be useful when composing a new operation in Python
-  All standard Python op constructors apply this function to each of their
-  Tensor-valued inputs, which allows those ops to accept numpy arrays, Python
-  lists, and scalars in addition to `Tensor` objects.
-
-  Args:
-    value: An object whose type has a registered `Tensor` conversion function.
-    dtype: Optional element type for the returned tensor. If missing, the
-      type is inferred from the type of `value`.
-    name: Optional name to use if a new `Tensor` is created.
-    as_ref: True if we want the mutable view of Variables, if applicable.
-    preferred_dtype: Optional element type for the returned tensor,
-      used when dtype is None. In some cases, a caller may not have a
-      dtype in mind when converting to a tensor, so preferred_dtype
-      can be used as a soft preference.  If the conversion to
-      `preferred_dtype` is not possible, this argument has no effect.
-    ctx: Optional: The value of context.context().
-    accept_symbolic_tensors: Whether Keras graph tensors should be accepted as
-      a valid tensor type during eager execution.
-      If False, this function will raise an exception if it is passed such
-      a tensor during eager eager execution.
-
-  Returns:
-    A `Tensor` based on `value`.
-
-  Raises:
-    TypeError: If no conversion function is registered for `value`.
-    RuntimeError: If a registered conversion function returns an invalid value.
-
-  """
+  """Implementation of the public convert_to_tensor."""
   if ctx is None: ctx = context.context()
   if isinstance(value, EagerTensor):
     if ctx.executing_eagerly():
@@ -2161,6 +2126,23 @@ class Operation(object):
     """Removes any control inputs to this operation."""
     c_api.RemoveAllControlInputs(self._graph._c_graph, self._c_op)  # pylint: disable=protected-access
 
+  def _add_outputs(self, types, shapes):
+    """Adds new Tensors to self.outputs.
+
+    Note: this is generally unsafe to use. This is used in certain situations in
+    conjunction with _set_type_list_attr.
+
+    Arguments:
+      types: list of DTypes
+      shapes: list of TensorShapes
+    """
+    assert len(types) == len(shapes)
+    orig_num_outputs = len(self.outputs)
+    for i in range(len(types)):
+      t = Tensor(self, orig_num_outputs + i, types[i])
+      self._outputs.append(t)
+      t.set_shape(shapes[i])
+
   def __str__(self):
     return str(self.node_def)
 
@@ -2372,6 +2354,25 @@ class Operation(object):
       # pylint: enable=protected-access
     finally:
       c_api.TF_DeleteBuffer(buf)
+
+  def _set_func_attr(self, attr_name, func_name):
+    """Private method used to set a function attribute in the node_def."""
+    func = attr_value_pb2.NameAttrList(name=func_name)
+    self._set_attr(attr_name, attr_value_pb2.AttrValue(func=func))
+
+  def _set_type_list_attr(self, attr_name, types):
+    """Private method used to set a function attribute in the node_def."""
+    if not types: return
+    if isinstance(types[0], dtypes.DType):
+      types = [dt.as_datatype_enum for dt in types]
+    types_list = attr_value_pb2.AttrValue.ListValue(type=types)
+    self._set_attr(attr_name, attr_value_pb2.AttrValue(list=types_list))
+
+  def _set_shape_list_attr(self, attr_name, shapes):
+    """Private method used to set a function attribute in the node_def."""
+    shapes = [s.as_proto() for s in shapes]
+    shapes_list = attr_value_pb2.AttrValue.ListValue(shape=shapes)
+    self._set_attr(attr_name, attr_value_pb2.AttrValue(list=shapes_list))
 
   def get_attr(self, name):
     """Returns the value of the attr of this op with the given `name`.
