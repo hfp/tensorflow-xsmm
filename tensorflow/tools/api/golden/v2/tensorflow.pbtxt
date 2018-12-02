@@ -609,10 +609,6 @@ tf_module {
     argspec: "args=[\'equation\'], varargs=inputs, keywords=kwargs, defaults=None"
   }
   member_method {
-    name: "enable_eager_execution"
-    argspec: "args=[\'config\', \'device_policy\', \'execution_mode\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'None\'], "
-  }
-  member_method {
     name: "ensure_shape"
     argspec: "args=[\'x\', \'shape\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
@@ -737,10 +733,6 @@ tf_module {
     argspec: "args=[\'x\', \'y\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
-    name: "lin_space"
-    argspec: "args=[\'start\', \'stop\', \'num\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
-  }
-  member_method {
     name: "linspace"
     argspec: "args=[\'start\', \'stop\', \'num\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
@@ -751,14 +743,6 @@ tf_module {
   member_method {
     name: "load_op_library"
     argspec: "args=[\'library_filename\'], varargs=None, keywords=None, defaults=None"
-  }
-  member_method {
-    name: "log"
-    argspec: "args=[\'x\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
-  }
-  member_method {
-    name: "log1p"
-    argspec: "args=[\'x\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
     name: "logical_and"
@@ -1063,6 +1047,18 @@ tf_module {
   member_method {
     name: "tanh"
     argspec: "args=[\'x\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
+  }
+  member_method {
+    name: "tensor_scatter_add"
+    argspec: "args=[\'tensor\', \'indices\', \'updates\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
+  }
+  member_method {
+    name: "tensor_scatter_sub"
+    argspec: "args=[\'tensor\', \'indices\', \'updates\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
+  }
+  member_method {
+    name: "tensor_scatter_update"
+    argspec: "args=[\'tensor\', \'indices\', \'updates\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
     name: "tensordot"
