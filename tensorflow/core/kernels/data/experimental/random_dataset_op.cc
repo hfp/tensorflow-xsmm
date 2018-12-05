@@ -76,6 +76,8 @@ class RandomDatasetOp : public DatasetOpKernel {
                              ")::Dataset");
     }
 
+    int64 Cardinality() const override { return kInfiniteCardinality; }
+
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
                               DatasetGraphDefBuilder* b,
@@ -152,7 +154,7 @@ class RandomDatasetOp : public DatasetOpKernel {
   };
 };
 
-REGISTER_KERNEL_BUILDER(Name("RandomDataset").Device(DEVICE_CPU),
+REGISTER_KERNEL_BUILDER(Name("ExperimentalRandomDataset").Device(DEVICE_CPU),
                         RandomDatasetOp);
 
 }  // namespace

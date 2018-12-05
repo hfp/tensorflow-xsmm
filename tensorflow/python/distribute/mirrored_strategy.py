@@ -43,6 +43,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import coordinator
 from tensorflow.python.util import nest
+from tensorflow.python.util.tf_export import tf_export
 
 
 # TODO(josh11b): Replace asserts in this file with if ...: raise ...
@@ -422,6 +423,7 @@ def all_local_devices(num_gpus=None):
           ("/device:CPU:0",))
 
 
+@tf_export("distribute.MirroredStrategy")
 class MirroredStrategy(distribute_lib.DistributionStrategy):
   """Mirrors vars to distribute across multiple devices and machines.
 
@@ -520,7 +522,7 @@ class MirroredExtended(distribute_lib.DistributionStrategyExtended):
     def _real_mirrored_creator(devices, *args, **kwargs):  # pylint: disable=g-missing-docstring
       index = {}
       for i, d in enumerate(devices):
-        with ops.device(d):
+        with ops.init_scope(), ops.device(d):
           if i > 0:
             # Give replicas meaningful distinct names:
             var0name = index[devices[0]].name.split(":")[0]

@@ -93,6 +93,10 @@ class ScanDatasetOp : public UnaryDatasetOpKernel {
 
     string DebugString() const override { return "ScanDatasetOp::Dataset"; }
 
+    // TODO(b/120482302): Note that this is inaccurate until MapDataset is
+    // modified to preserve cardinality.
+    int64 Cardinality() const override { return input_->Cardinality(); }
+
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
                               DatasetGraphDefBuilder* b,
@@ -271,7 +275,8 @@ class ScanDatasetOp : public UnaryDatasetOpKernel {
   NameAttrList func_;
 };
 
-REGISTER_KERNEL_BUILDER(Name("ScanDataset").Device(DEVICE_CPU), ScanDatasetOp);
+REGISTER_KERNEL_BUILDER(Name("ExperimentalScanDataset").Device(DEVICE_CPU),
+                        ScanDatasetOp);
 
 }  // namespace
 }  // namespace data

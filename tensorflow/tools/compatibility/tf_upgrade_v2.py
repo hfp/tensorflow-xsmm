@@ -417,6 +417,8 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.sparse.concat",
         "tf.sparse_split":
             "tf.sparse.split",
+        "tf.sparse_matmul":
+            "tf.linalg.matmul",
         "tf.random.stateless_multinomial":
             "tf.random.stateless_categorical",
         "tf.string_to_hash_bucket":
@@ -443,6 +445,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.io.decode_csv",
         "tf.data.Iterator":
             "tf.compat.v1.data.Iterator",
+        "tf.parse_example":
+            "tf.io.parse_example",
+        "tf.parse_single_example":
+            "tf.io.parse_single_example",
         "tf.nn.fused_batch_norm":
             "tf.compat.v1.nn.fused_batch_norm",
         "tf.nn.softmax_cross_entropy_with_logits_v2":
@@ -453,6 +459,20 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.compat.v1.losses.Reduction.SUM_BY_NONZERO_WEIGHTS",
         "tf.losses.Reduction.SUM_OVER_NONZERO_WEIGHTS":
             "tf.compat.v1.losses.Reduction.SUM_OVER_NONZERO_WEIGHTS",
+        "tf.lite.constants.FLOAT":
+            "tf.float32",
+        "tf.lite.constants.INT32":
+            "tf.int32",
+        "tf.lite.constants.INT64":
+            "tf.int64",
+        "tf.lite.constants.STRING":
+            "tf.string",
+        "tf.lite.constants.QUANTIZED_UINT8":
+            "tf.uint8",
+        "tf.arg_max":
+            "tf.argmax",
+        "tf.arg_min":
+            "tf.argmin",
     }
     # pylint: enable=line-too-long
 
@@ -482,9 +502,16 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "data_format"
         ],
         "tf.nn.crelu": ["features", "name", "axis"],
+        "tf.nn.weighted_moments": [
+            "x", "axes", "frequency_weights", "name", "keep_dims"
+        ],
         "tf.nn.pool": [
             "input", "window_shape", "pooling_type", "padding", "dilation_rate",
             "strides", "name", "data_format"
+        ],
+        "tf.nn.separable_conv2d": [
+            "input", "depthwise_filter", "pointwise_filter", "strides",
+            "padding", "rate", "name", "data_format"
         ],
         "tf.nn.depthwise_conv2d": [
             "input", "filter", "strides", "padding", "rate", "name",
@@ -524,6 +551,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.sparse.segment_sum": [
             "data", "indices", "segment_ids", "name", "num_segments"
         ],
+        "tf.sparse_matmul": [
+            "a", "b", "transpose_a", "transpose_b", "a_is_sparse",
+            "b_is_sparse", "name"
+        ],
         "tf.io.decode_csv": [
             "records",
             "record_defaults",
@@ -541,6 +572,12 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.strings.length": ["input", "name", "unit"],
         "tf.transpose": ["a", "perm", "name", "conjugate"],
         "tf.tuple": ["tensors", "name", "control_inputs"],
+        "tf.parse_example": [
+            "serialized", "features", "name", "example_names"
+        ],
+        "tf.parse_single_example": [
+            "serialized", "features", "name", "example_names"
+        ],
         "tf.io.parse_example": [
             "serialized", "features", "name", "example_names"
         ],
@@ -766,11 +803,32 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "only effects core estimator. If you are using "
         "tf.contrib.learn.Estimator, please switch to using core estimator.")
 
+    make_initializable_iterator_deprecation = (
+        "(Manual edit required) The "
+        "`tf.data.Dataset.make_initializable_iterator()` method has been "
+        "removed. If you are using the Estimator API, you can return a dataset "
+        "directly from your input functions without creating an iterator. "
+        "As a last resort, please replace calls to that method on `dataset` "
+        "with a call to "
+        "`tf.compat.v1.data.make_initializable_iterator(dataset)`.")
+
+    make_one_shot_iterator_deprecation = (
+        "(Manual edit required) The "
+        "`tf.data.Dataset.make_one_shot_iterator()` method has been "
+        "removed. If you are using eager execution, you can iterate over "
+        "`dataset` using a Python `for` loop. If you are using the Estimator "
+        "API, you can return a dataset directly from your input functions "
+        "without creating an iterator. As a last resort, please replace calls "
+        "to that method on `dataset` with a call to "
+        "`tf.compat.v1.data.make_one_shot_iterator(dataset)`.")
+
     # Specify warnings for functions that aren't restricted to the tf.x.y.z
     # format. This should only be used for methods with unique names, e.g.
     # export_savedmodel, which is only defined in Estimator objects.
     self.unrestricted_function_warnings = {
         "export_savedmodel": export_saved_model_renamed,
+        "make_initializable_iterator": make_initializable_iterator_deprecation,
+        "make_one_shot_iterator": make_one_shot_iterator_deprecation,
     }
 
   @staticmethod

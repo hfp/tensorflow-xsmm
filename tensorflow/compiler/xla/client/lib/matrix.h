@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,24 +13,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_TF2XLA_LIB_BATCH_DOT_H_
-#define TENSORFLOW_COMPILER_TF2XLA_LIB_BATCH_DOT_H_
+#ifndef TENSORFLOW_COMPILER_XLA_CLIENT_LIB_MATRIX_H_
+#define TENSORFLOW_COMPILER_XLA_CLIENT_LIB_MATRIX_H_
 
 #include "tensorflow/compiler/xla/client/xla_builder.h"
+#include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
-namespace tensorflow {
+namespace xla {
+
+// Returns an m x n matrix with 1s on the diagonal elements, zeros everywhere
+// else.
+XlaOp IdentityMatrix(XlaBuilder* builder, PrimitiveType type, int64 m, int64 n);
+
+// Get the diagonals of the last two dimensions. If 'x' has shape
+// [..., M, N], then the output has shape [..., min(M, N)], containing the
+// diagonal elements (i.e., with indices [..., i, i]).
+XlaOp GetMatrixDiagonal(XlaOp x);
+
+// Get the upper or lower triangle part of the last two dimensions
+XlaOp Triangle(XlaOp x, bool lower);
+
+// Get the upper triangle part of the last two dimensions
+XlaOp UpperTriangle(XlaOp x);
+
+// Get the lower triangle part of the last two dimensions
+XlaOp LowerTriangle(XlaOp x);
 
 // Multiplies slices of two tensors in batches.
 
 // Multiplies all slices of `Tensor` `x` and `y` (each slice can be
 // viewed as an element of a batch), and arranges the individual results
-// in a single output tensor of the same batch size. Each of the
-// individual slices can optionally be transposed before multiplication by
-// setting the `transpose_x` or `transpose_y` flag to `true`. Similarly, each
-// can be elementwise-complex-conjugated by setting the `conjugate_x` or
-// `conjugate_y` flag to `true`. To apply a Hermitian adjoint to `x`, set both
-// `transpose_x` and `conjugate_x` to `true`, and analogously for `y`.
+// in a single output tensor of the same batch size.
 //
 // The input tensors `x` and `y` are 2-D or higher with shape `[..., r_x, c_x]`
 // and `[..., r_y, c_y]`.
@@ -44,11 +58,16 @@ namespace tensorflow {
 //
 //     output[..., :, :] = matrix(x[..., :, :]) * matrix(y[..., :, :])
 xla::XlaOp BatchDot(
-    xla::XlaOp x, xla::XlaOp y, bool transpose_x = false,
-    bool transpose_y = false, bool conjugate_x = false,
-    bool conjugate_y = false,
+    xla::XlaOp x, xla::XlaOp y,
     xla::PrecisionConfig::Precision precision = xla::PrecisionConfig::DEFAULT);
 
-}  // namespace tensorflow
+// Transposes a stack of matrices `x` by swapping the last two dimensions.
+xla::XlaOp TransposeInMinorDims(xla::XlaOp x);
 
-#endif  // TENSORFLOW_COMPILER_TF2XLA_LIB_BATCH_DOT_H_
+// Transposes `x` in its minor dimensions if `transpose` is true, otherwise
+// returns `x` unchanged.
+xla::XlaOp MaybeTransposeInMinorDims(xla::XlaOp x, bool transpose);
+
+}  // namespace xla
+
+#endif  // TENSORFLOW_COMPILER_XLA_CLIENT_LIB_MATRIX_H_

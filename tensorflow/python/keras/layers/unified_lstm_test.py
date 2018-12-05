@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import time
 
+from absl.testing import parameterized
 import numpy as np
 
 from tensorflow.core.protobuf import config_pb2
@@ -51,7 +52,7 @@ _graph_options = config_pb2.GraphOptions(rewrite_options=_rewrites)
 _config = config_pb2.ConfigProto(graph_options=_graph_options)
 
 
-class UnifiedLSTMTest(test.TestCase):
+class UnifiedLSTMTest(test.TestCase, parameterized.TestCase):
 
   @test_util.run_deprecated_v1
   def test_unifiedLSTM(self):
@@ -90,9 +91,9 @@ class UnifiedLSTMTest(test.TestCase):
             predict: y_train
         })
         if test.is_gpu_available():
-          self.assertEquals(runtime_value, b'cudnn')
+          self.assertEqual(runtime_value, b'cudnn')
         else:
-          self.assertEquals(runtime_value, b'cpu')
+          self.assertEqual(runtime_value, b'cpu')
         # Make sure the loss is updated for every epoch
         # (layer weights properly updated).
         self.assertNotEqual(existing_loss, loss_value)
@@ -148,13 +149,70 @@ class UnifiedLSTMTest(test.TestCase):
             predict: y_train
         })
         if test.is_gpu_available():
-          self.assertEquals(runtime_value, b'cudnn')
+          self.assertEqual(runtime_value, b'cudnn')
         else:
-          self.assertEquals(runtime_value, b'cpu')
+          self.assertEqual(runtime_value, b'cpu')
         # Make sure the loss is updated for every epoch
         # (layer weights properly updated).
         self.assertNotEqual(existing_loss, loss_value)
         existing_loss = loss_value
+
+  @parameterized.named_parameters(
+      ('_non_tan_activation', 'relu', 0, False, True, None),
+      ('_use_recurrent_dropout', 'tanh', 0.1, False, True, None),
+      ('_unroll', 'tanh', 0, True, True, None),
+      ('_not_use_bias', 'tanh', 0, False, False, None),
+      ('_use_bias_regularizer', 'tanh', 0, False, True, 'l2')
+  )
+  @test_util.run_in_graph_and_eager_modes(config=_config)
+  def test_could_use_defun_backend(self, activation, recurrent_dropout,
+                                   unroll, use_bias, bias_regularizer):
+    layer = UnifiedLSTM(1,
+                        activation=activation,
+                        recurrent_dropout=recurrent_dropout,
+                        unroll=unroll,
+                        use_bias=use_bias,
+                        bias_regularizer=bias_regularizer)
+    self.assertFalse(layer.could_use_cudnn)
+
+  @test_util.run_in_graph_and_eager_modes(config=_config)
+  def test_unified_lstm_output_on_multiple_kernel(self):
+    input_shape = 10
+    rnn_state_size = 8
+    timestep = 4
+    batch = 100
+
+    x_train = np.random.random((batch, timestep, input_shape))
+
+    inputs = keras.layers.Input(
+        shape=[timestep, input_shape], dtype=dtypes.float32)
+    with test_util.device(use_gpu=False):
+      # Note that CuDNN use 'sigmoid' as activation. Force the CPU
+      # implementation to use 'sigmoid' so that it will generate same output as
+      # CuDNN implementation.
+      layer = UnifiedLSTM(rnn_state_size, recurrent_activation='sigmoid')
+      output = layer(inputs)
+      cpu_model = keras.models.Model(inputs, output)
+      weights = cpu_model.get_weights()
+      y_1 = cpu_model.predict(x_train)
+
+    with test_util.device(use_gpu=True):
+      layer = UnifiedLSTM(rnn_state_size, recurrent_activation='sigmoid')
+      output = layer(inputs)
+      gpu_model = keras.models.Model(inputs, output)
+      gpu_model.set_weights(weights)
+      y_2 = gpu_model.predict(x_train)
+
+    with test_util.device(use_gpu=True):
+      layer = keras.layers.LSTM(rnn_state_size, recurrent_activation='sigmoid')
+      output = layer(inputs)
+      canonical_model = keras.models.Model(inputs, output)
+      # Remove the extra cudnn bias since canonical lstm will not use it.
+      canonical_model.set_weights(weights[:3])
+      y_3 = canonical_model.predict(x_train)
+
+    self.assertAllClose(y_1, y_2)
+    self.assertAllClose(y_2, y_3)
 
   @test_util.run_in_graph_and_eager_modes(config=_config)
   def test_keras_model_with_lstm(self):
@@ -211,7 +269,7 @@ class UnifiedLSTMTest(test.TestCase):
     layer = UnifiedLSTM(units, return_sequences=True)
     model.add(layer)
     outputs = model.layers[-1].output
-    self.assertEquals(outputs.get_shape().as_list(), [None, timesteps, units])
+    self.assertEqual(outputs.get_shape().as_list(), [None, timesteps, units])
 
   @test_util.run_in_graph_and_eager_modes(config=_config)
   def test_dynamic_behavior_LSTM(self):
@@ -242,20 +300,20 @@ class UnifiedLSTMTest(test.TestCase):
         },
         input_shape=(num_samples, timesteps, embedding_dim))
 
+  @parameterized.parameters([0, 1, 2])
   @test_util.run_in_graph_and_eager_modes(config=_config)
-  def test_implementation_mode_LSTM(self):
+  def test_implementation_mode_LSTM(self, implementation_mode):
     num_samples = 2
     timesteps = 3
     embedding_dim = 4
     units = 2
-    for mode in [1, 2]:
-      testing_utils.layer_test(
-          UnifiedLSTM,
-          kwargs={
-              'units': units,
-              'implementation': mode
-          },
-          input_shape=(num_samples, timesteps, embedding_dim))
+    testing_utils.layer_test(
+        UnifiedLSTM,
+        kwargs={
+            'units': units,
+            'implementation': implementation_mode
+        },
+        input_shape=(num_samples, timesteps, embedding_dim))
 
   @test_util.run_in_graph_and_eager_modes(config=_config)
   def test_constraints_LSTM(self):
