@@ -494,7 +494,8 @@ def with_control_flow_v2(cls):
     return cls
 
   for name, value in cls.__dict__.copy().items():
-    if (callable(value) and name.startswith("test") and
+    if (callable(value) and
+        name.startswith(unittest.TestLoader.testMethodPrefix) and
         not getattr(value, "_disable_control_flow_v2", False)):
       setattr(cls, name + "WithControlFlowV2", enable_control_flow_v2(value))
   return cls
@@ -893,8 +894,10 @@ def run_all_in_graph_and_eager_modes(cls):
   """Execute all test methods in the given class with and without eager."""
   base_decorator = run_in_graph_and_eager_modes
   for name, value in cls.__dict__.copy().items():
-    if callable(value) and name.startswith("test") and not (
-        name.startswith("testSkipEager") or name.startswith("test_skip_eager")):
+    if (callable(value) and
+        name.startswith(unittest.TestLoader.testMethodPrefix) and
+        not (name.startswith("testSkipEager")
+             or name.startswith("test_skip_eager"))):
       setattr(cls, name, base_decorator(value))
   return cls
 
@@ -1059,7 +1062,16 @@ def run_v1_only(reason, func=None):
 
   def decorator(f):
     if tf_inspect.isclass(f):
-      raise ValueError("`run_v1_only` only supports test methods.")
+      setup = f.__dict__.get("setUp")
+      if setup is not None:
+        setattr(f, "setUp", decorator(setup))
+
+      for name, value in f.__dict__.copy().items():
+        if (callable(value) and
+            name.startswith(unittest.TestLoader.testMethodPrefix)):
+          setattr(f, name, decorator(value))
+
+      return f
 
     def decorated(self, *args, **kwargs):
       if tf2.enabled():
@@ -1263,6 +1275,63 @@ class CapturedWrites(object):
     with open(self.capture_location) as tmp_file:
       output_data = "".join(tmp_file.readlines())
     return output_data
+
+
+class FakeEagerSession(object):
+  """Fake session so tests that conditionally use placeholders can use eager.
+
+  There are a number of tests that conditionally use placeholders for shape
+  inference. The pattern is demonstrated here:
+
+  ```python
+  with self.cached_session() as sess:
+    if static_shape:
+      y = math_ops.matmul(x, ...)
+      feed_dict = {}
+    else:
+      x_ph = array_ops.placeholder(...)
+      y = math_ops.matmul(x_ph, ...)
+      feed_dict = {x_ph: x}
+    val = sess.run(y, feed_dict=feed_dict)
+  ```
+
+  Since the feed_dict is empty when not using placeholders we should be able to
+  call self.evaluate(), however this requires rewriting the test case.
+  This class shold be considered a stop-gap solution to get tests running with
+  eager with minimal changes to the actual test.
+  """
+
+  def __init__(self, test_case):
+    self._test_case = test_case
+
+  def run(self, fetches, *args, **kwargs):
+    """Evalaute `fetches`.
+
+    Fail if additional args are specified.
+
+    Args:
+      fetches: A Tensor or a nested list/tuple of Tensors.
+      *args: Positional arguments
+      **kwargs: Keyword arguments
+
+    Raises:
+      RuntimeError: If args or kwargs are specified.
+
+    Returns:
+      Tensors as numpy values.
+    """
+    feed_dict = kwargs.pop("feed_dict", {})
+    if feed_dict:
+      raise RuntimeError(
+          "feed_dict is not supported when eager execution is enabled "
+          "(in this case, sess.run(t) is shorthand for t.numpy()")
+
+    if args or kwargs:
+      raise RuntimeError(
+          "Optional args are not supported when eager execution is enabled "
+          "(in this case, sess.run(t) is shorthand for t.numpy()")
+
+    return self._test_case.evaluate(fetches)
 
 
 class ErrorLoggingSession(session.Session):
@@ -1572,7 +1641,7 @@ class TensorFlowTestCase(googletest.TestCase):
       the graph building and execution code in a test case.
     """
     if context.executing_eagerly():
-      yield None
+      yield FakeEagerSession(self)
     else:
       sess = self._get_cached_session(
           graph, config, force_gpu, crash_if_inconsistent_args=True)

@@ -123,11 +123,11 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     tf_http_archive(
         name = "com_google_absl",
         build_file = clean_dep("//third_party:com_google_absl.BUILD"),
-        sha256 = "7bb63336f2522ce893c34ec241e6ccdfdece56b1a1f43eb3a732712dbd426f4f",
-        strip_prefix = "abseil-cpp-44b0fafc62d9b8f192e8180cbe9c4b806b339d57",
+        sha256 = "f7e3734c3c5854cf2bae1e193fbbd8f7d261673e0f2e042b1fca52732f688a0a",
+        strip_prefix = "abseil-cpp-284378a71b32dfb3af4e3661f585e671d1b603a3",
         urls = [
-            "https://mirror.bazel.build/github.com/abseil/abseil-cpp/archive/44b0fafc62d9b8f192e8180cbe9c4b806b339d57.tar.gz",
-            "https://github.com/abseil/abseil-cpp/archive/44b0fafc62d9b8f192e8180cbe9c4b806b339d57.tar.gz",
+            "https://mirror.bazel.build/github.com/abseil/abseil-cpp/archive/284378a71b32dfb3af4e3661f585e671d1b603a3.tar.gz",
+            "https://github.com/abseil/abseil-cpp/archive/284378a71b32dfb3af4e3661f585e671d1b603a3.tar.gz",
         ],
     )
 
@@ -166,12 +166,12 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
 
     tf_http_archive(
         name = "com_googlesource_code_re2",
-        sha256 = "803c7811146edeef8f91064de37c6f19136ff01a2a8cdb3230e940b2fd9f07fe",
-        strip_prefix = "re2-2018-07-01",
+        sha256 = "a31397714a353587413d307337d0b58f8a2e20e2b9d02f2e24e3463fa4eeda81",
+        strip_prefix = "re2-2018-10-01",
         system_build_file = clean_dep("//third_party/systemlibs:re2.BUILD"),
         urls = [
-            "https://mirror.bazel.build/github.com/google/re2/archive/2018-07-01.tar.gz",
-            "https://github.com/google/re2/archive/2018-07-01.tar.gz",
+            "https://mirror.bazel.build/github.com/google/re2/archive/2018-10-01.tar.gz",
+            "https://github.com/google/re2/archive/2018-10-01.tar.gz",
         ],
     )
 
@@ -345,8 +345,8 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     )
 
     PROTOBUF_URLS = [
-        "https://mirror.bazel.build/github.com/google/protobuf/archive/v3.6.1.2.tar.gz",
-        "https://github.com/google/protobuf/archive/v3.6.1.2.tar.gz",
+        "https://mirror.bazel.build/github.com/protocolbuffers/protobuf/archive/v3.6.1.2.tar.gz",
+        "https://github.com/protocolbuffers/protobuf/archive/v3.6.1.2.tar.gz",
     ]
     PROTOBUF_SHA256 = "2244b0308846bb22b4ff0bcc675e99290ff9f1115553ae9671eba1030af31bc0"
     PROTOBUF_STRIP_PREFIX = "protobuf-3.6.1.2"
@@ -355,6 +355,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         name = "protobuf_archive",
         sha256 = PROTOBUF_SHA256,
         strip_prefix = PROTOBUF_STRIP_PREFIX,
+        system_build_file = clean_dep("//third_party/systemlibs:protobuf.BUILD"),
+        system_link_files = {
+            "//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
+        },
         urls = PROTOBUF_URLS,
     )
 
@@ -365,6 +369,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         name = "com_google_protobuf",
         sha256 = PROTOBUF_SHA256,
         strip_prefix = PROTOBUF_STRIP_PREFIX,
+        system_build_file = clean_dep("//third_party/systemlibs:protobuf.BUILD"),
+        system_link_files = {
+            "//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
+        },
         urls = PROTOBUF_URLS,
     )
 
@@ -372,6 +380,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
         name = "com_google_protobuf_cc",
         sha256 = PROTOBUF_SHA256,
         strip_prefix = PROTOBUF_STRIP_PREFIX,
+        system_build_file = clean_dep("//third_party/systemlibs:protobuf.BUILD"),
+        system_link_files = {
+            "//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
+        },
         urls = PROTOBUF_URLS,
     )
 
@@ -720,12 +732,22 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     )
 
     tf_http_archive(
-        name = "tflite_mobilenet",
-        build_file = clean_dep("//third_party:tflite_mobilenet.BUILD"),
-        sha256 = "23f814d1c076bdf03715dfb6cab3713aa4fbdf040fd5448c43196bd2e97a4c1b",
+        name = "tflite_mobilenet_float",
+        build_file = clean_dep("//third_party:tflite_mobilenet_float.BUILD"),
+        sha256 = "2fadeabb9968ec6833bee903900dda6e61b3947200535874ce2fe42a8493abc0",
         urls = [
-            "https://mirror.bazel.build/storage.googleapis.com/download.tensorflow.org/models/tflite/mobilenet_v1_224_android_quant_2017_11_08.zip",
-            "https://storage.googleapis.com/download.tensorflow.org/models/tflite/mobilenet_v1_224_android_quant_2017_11_08.zip",
+            "http://download.tensorflow.org/models/mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224.tgz",
+            "http://download.tensorflow.org/models/mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224.tgz",
+        ],
+    )
+
+    tf_http_archive(
+        name = "tflite_mobilenet_quant",
+        build_file = clean_dep("//third_party:tflite_mobilenet_quant.BUILD"),
+        sha256 = "d32432d28673a936b2d6281ab0600c71cf7226dfe4cdcef3012555f691744166",
+        urls = [
+            "http://download.tensorflow.org/models/mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224_quant.tgz",
+            "http://download.tensorflow.org/models/mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224_quant.tgz",
         ],
     )
 

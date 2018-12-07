@@ -100,10 +100,8 @@ class Iterator(checkpointable.CheckpointableBase):
       raise ValueError("If `structure` is not specified, all of "
                        "`output_types`, `output_shapes`, and `output_classes`"
                        " must be specified.")
-    # pylint: disable=protected-access
-    self._structure = structure_lib.Structure._from_legacy_structure(
+    self._structure = structure_lib.convert_legacy_structure(
         output_types, output_shapes, output_classes)
-    # pylint: enable=protected-access
 
     self._string_handle = gen_dataset_ops.iterator_to_string_handle(
         self._iterator_resource)
@@ -530,8 +528,9 @@ class EagerIterator(checkpointable.CheckpointableBase):
     self._device = context.context().device_name
     with ops.device("/cpu:0"):
       # pylint: disable=protected-access
+      dataset = dataset._apply_options()
       ds_variant = dataset._as_variant_tensor()
-      self._structure = structure_lib.Structure._from_legacy_structure(
+      self._structure = structure_lib.convert_legacy_structure(
           dataset.output_types, dataset.output_shapes, dataset.output_classes)
       self._flat_output_types = self._structure._flat_types
       self._flat_output_shapes = self._structure._flat_shapes
@@ -543,6 +542,7 @@ class EagerIterator(checkpointable.CheckpointableBase):
         # Delete the resource when this object is deleted
         self._resource_deleter = resource_variable_ops.EagerResourceDeleter(
             handle=self._resource, handle_device=self._device)
+      # pylint: enable=protected-access
 
   def __iter__(self):
     return self

@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.python.data.experimental.ops import optimization_options
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.ops import iterator_ops
 from tensorflow.python.data.util import nest
@@ -73,6 +74,9 @@ def copy_to_device(target_device, source_device="/cpu:0"):
   def _apply_fn(dataset):
     options = dataset_ops.Options()
     options.experimental_autotune = False
+    opt_options = optimization_options.OptimizationOptions()
+    opt_options.apply_default_optimizations = False
+    options.experimental_optimization = opt_options
     return _CopyToDeviceDataset(
         dataset, target_device=target_device,
         source_device=source_device).with_options(options)
@@ -261,16 +265,8 @@ class _MapOnGpuDataset(dataset_ops.UnaryDataset):
         **dataset_ops.flat_structure(self))
 
   @property
-  def output_classes(self):
-    return self._map_func.output_classes
-
-  @property
-  def output_shapes(self):
-    return self._map_func.output_shapes
-
-  @property
-  def output_types(self):
-    return self._map_func.output_types
+  def _element_structure(self):
+    return self._map_func.output_structure
 
   def _transformation_name(self):
     return "map_on_gpu()"

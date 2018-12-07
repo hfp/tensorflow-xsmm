@@ -63,6 +63,15 @@ def get_v2_names(symbol):
   return list(names_v2)
 
 
+def get_symbol_for_name(root, name):
+  name_parts = name.split(".")
+  symbol = root
+  # Iterate starting with second item since 1st item is "tf.".
+  for part in name_parts[1:]:
+    symbol = getattr(symbol, part)
+  return symbol
+
+
 def get_func_and_args_from_str(call_str):
   """Parse call string to get function and argument names.
 
@@ -142,6 +151,8 @@ class TestUpgrade(test_util.TensorFlowTestCase):
 
     # Converts all symbols in the v1 namespace to the v2 namespace, raising
     # an error if the target of the conversion is not in the v2 namespace.
+    # Please regenerate the renames file or edit any manual renames if this
+    # test fails.
     def conversion_visitor(unused_path, unused_parent, children):
       for child in children:
         _, attr = tf_decorator.unwrap(child[1])
@@ -158,6 +169,35 @@ class TestUpgrade(test_util.TensorFlowTestCase):
     visitor = public_api.PublicAPIVisitor(conversion_visitor)
     visitor.do_not_descend_map["tf"].append("contrib")
     visitor.private_map["tf.compat"] = ["v1", "v2"]
+    traverse.traverse(tf.compat.v1, visitor)
+
+  def testAllAPIV1(self):
+    collect = True
+    v1_symbols = set([])
+
+    # Converts all symbols in the v1 namespace to the v2 namespace, raising
+    # an error if the target of the conversion is not in the v1 namespace.
+    def conversion_visitor(unused_path, unused_parent, children):
+      for child in children:
+        _, attr = tf_decorator.unwrap(child[1])
+        api_names = get_v1_names(attr)
+        for name in api_names:
+          if collect:
+            v1_symbols.add("tf." + name)
+          else:
+            _, _, _, text = self._upgrade("tf." + name)
+            if (text and
+                not text.startswith("tf.compat.v1") and
+                text not in v1_symbols):
+              self.assertFalse(
+                  True, "Symbol %s generated from %s not in v1 API" % (
+                      text, name))
+
+    visitor = public_api.PublicAPIVisitor(conversion_visitor)
+    visitor.do_not_descend_map["tf"].append("contrib")
+    visitor.private_map["tf.compat"] = ["v1", "v2"]
+    traverse.traverse(tf.compat.v1, visitor)
+    collect = False
     traverse.traverse(tf.compat.v1, visitor)
 
   def testKeywordArgNames(self):
@@ -214,6 +254,41 @@ class TestUpgrade(test_util.TensorFlowTestCase):
     visitor.do_not_descend_map["tf"].append("contrib")
     visitor.private_map["tf.compat"] = ["v1", "v2"]
     traverse.traverse(tf.compat.v1, visitor)
+
+  def testReorderFileNeedsUpdate(self):
+    reordered_function_names = (
+        tf_upgrade_v2.TFAPIChangeSpec().reordered_function_names)
+    function_reorders = (
+        tf_upgrade_v2.TFAPIChangeSpec().function_reorders)
+
+    added_names_message = """Some function names in
+self.reordered_function_names are not in reorders_v2.py.
+Please run the following commands to update reorders_v2.py:
+bazel build tensorflow/tools/compatibility/update:generate_v2_reorders_map
+bazel-bin/tensorflow/tools/compatibility/update/generate_v2_reorders_map
+"""
+    removed_names_message = """%s in self.reorders_v2 does not match
+any name in self.reordered_function_names.
+Please run the following commands to update reorders_v2.py:
+bazel build tensorflow/tools/compatibility/update:generate_v2_reorders_map
+bazel-bin/tensorflow/tools/compatibility/update/generate_v2_reorders_map
+"""
+    self.assertTrue(
+        reordered_function_names.issubset(function_reorders),
+        added_names_message)
+    # function_reorders should contain reordered_function_names
+    # and their TensorFlow V1 aliases.
+    for name in function_reorders:
+      # get other names for this function
+      attr = get_symbol_for_name(tf.compat.v1, name)
+      _, attr = tf_decorator.unwrap(attr)
+      v1_names = get_v1_names(attr)
+      self.assertTrue(v1_names)
+      v1_names = ["tf.%s" % n for n in v1_names]
+      # check if any other name is in
+      self.assertTrue(
+          any(n in reordered_function_names for n in v1_names),
+          removed_names_message % name)
 
   def testRenameConstant(self):
     text = "tf.MONOLITHIC_BUILD\n"
@@ -489,6 +564,54 @@ class TestUpgrade(test_util.TensorFlowTestCase):
         "tf.nn.separable_conv2d(input=inp, depthwise_filter=d, "
         "pointwise_filter=pt, strides=strides, padding=pad, "
         "dilations=rate, name=name, data_format=fmt)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testInTopK(self):
+    text = "tf.math.in_top_k(a, b, c, n)"
+    expected_text = (
+        "tf.math.in_top_k(predictions=a, targets=b, k=c, name=n)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testDepthToSpace(self):
+    text = "tf.nn.depth_to_space(input, block_size, name, data_format)"
+    expected_text = (
+        "tf.nn.depth_to_space(input=input, block_size=block_size, "
+        "name=name, data_format=data_format)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testEmbeddingLookup(self):
+    text = ("tf.nn.embedding_lookup(params, ids, partition_strategy, name, "
+            "validate_indices, max_norm)")
+    expected_text = ("tf.nn.embedding_lookup(params=params, ids=ids, "
+                     "partition_strategy=partition_strategy, name=name, "
+                     "validate_indices=validate_indices, max_norm=max_norm)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testEmbeddingLookupSparse(self):
+    text = ("tf.nn.embedding_lookup_sparse(params, sp_ids, sp_weights, "
+            "partition_strategy, name, combiner, max_norm)")
+    expected_text = ("tf.nn.embedding_lookup_sparse(params=params, "
+                     "sp_ids=sp_ids, sp_weights=sp_weights, "
+                     "partition_strategy=partition_strategy, name=name, "
+                     "combiner=combiner, max_norm=max_norm)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testNnInTopK(self):
+    text = "tf.nn.in_top_k(predictions, targets, k, name)"
+    expected_text = ("tf.nn.in_top_k(predictions=predictions, "
+                     "targets=targets, k=k, name=name)")
+    _, unused_report, unused_errors, new_text = self._upgrade(text)
+    self.assertEqual(new_text, expected_text)
+
+  def testSpaceToDepth(self):
+    text = "tf.nn.space_to_depth(input, block_size, name, data_format)"
+    expected_text = ("tf.nn.space_to_depth(input=input, block_size=block_size, "
+                     "name=name, data_format=data_format)")
     _, unused_report, unused_errors, new_text = self._upgrade(text)
     self.assertEqual(new_text, expected_text)
 
