@@ -49,7 +49,7 @@ __all__ = [
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def quadrature_scheme_lognormal_gauss_hermite(
     loc, scale, quadrature_size,
@@ -100,7 +100,7 @@ def quadrature_scheme_lognormal_gauss_hermite(
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def quadrature_scheme_lognormal_quantiles(
     loc, scale, quadrature_size,
@@ -238,7 +238,7 @@ class PoissonLogNormalQuadratureCompound(distribution_lib.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                loc,
@@ -449,7 +449,7 @@ class PoissonLogNormalQuadratureCompound(distribution_lib.Distribution):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def concat_vectors(*args):
   """Concatenates input vectors, statically if possible."""

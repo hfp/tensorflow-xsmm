@@ -38,7 +38,7 @@ __all__ = [
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _use_static_shape(input_tensor, ndims):
   return input_tensor.shape.is_fully_defined() and isinstance(ndims, int)
@@ -50,7 +50,7 @@ def _use_static_shape(input_tensor, ndims):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _compute_min_event_ndims(bijector_list, compute_forward=True):
   """Computes the min_event_ndims associated with the give list of bijectors.
@@ -165,7 +165,7 @@ class Chain(bijector.Bijector):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self, bijectors=None, validate_args=False, name=None):
     """Instantiates `Chain` bijector.

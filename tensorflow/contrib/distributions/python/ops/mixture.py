@@ -75,7 +75,7 @@ class Mixture(distribution.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                cat,

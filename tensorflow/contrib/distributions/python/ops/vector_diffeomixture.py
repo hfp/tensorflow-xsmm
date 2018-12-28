@@ -56,7 +56,7 @@ __all__ = [
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def quadrature_scheme_softmaxnormal_gauss_hermite(
     normal_loc, normal_scale, quadrature_size,
@@ -126,7 +126,7 @@ def quadrature_scheme_softmaxnormal_gauss_hermite(
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def quadrature_scheme_softmaxnormal_quantiles(
     normal_loc, normal_scale, quadrature_size,
@@ -342,7 +342,7 @@ class VectorDiffeomixture(distribution_lib.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                mix_loc,
@@ -811,7 +811,7 @@ class VectorDiffeomixture(distribution_lib.Distribution):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def maybe_check_quadrature_param(param, name, validate_args):
   """Helper which checks validity of `loc` and `scale` init args."""
@@ -854,7 +854,7 @@ def maybe_check_quadrature_param(param, name, validate_args):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def determine_batch_event_shapes(grid, endpoint_affine):
   """Helper to infer batch_shape and event_shape."""
@@ -900,7 +900,7 @@ def determine_batch_event_shapes(grid, endpoint_affine):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def interpolate_loc(grid, loc):
   """Helper which interpolates between two locs."""
@@ -934,7 +934,7 @@ def interpolate_loc(grid, loc):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def interpolate_scale(grid, scale):
   """Helper which interpolates between two scales."""
@@ -958,7 +958,7 @@ def interpolate_scale(grid, scale):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def linop_scale(w, op):
   # We assume w > 0. (This assumption only relates to the is_* attributes.)
@@ -1001,7 +1001,7 @@ def linop_scale(w, op):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def concat_vectors(*args):
   """Concatenates input vectors, statically if possible."""
@@ -1017,7 +1017,7 @@ def concat_vectors(*args):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def add(x, y):
   """Adds inputs; interprets `None` as zero."""
@@ -1034,7 +1034,7 @@ def add(x, y):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def vec_osquare(x):
   """Computes the outer-product of a (batch of) vector, i.e., x.T x."""
@@ -1047,7 +1047,7 @@ def vec_osquare(x):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def softmax(x, axis, name=None):
   """Equivalent to tf.nn.softmax but works around b/70297725."""

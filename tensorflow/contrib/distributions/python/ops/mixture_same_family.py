@@ -104,7 +104,7 @@ class MixtureSameFamily(distribution.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                mixture_distribution,
@@ -341,7 +341,7 @@ class MixtureSameFamily(distribution.Distribution):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _outer_squared_difference(x, y):
   """Convenience function analogous to tf.squared_difference."""

@@ -195,7 +195,7 @@ class MaskedAutoregressiveFlow(bijector.Bijector):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                shift_and_log_scale_fn,
@@ -315,7 +315,7 @@ MASK_EXCLUSIVE = "exclusive"
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _gen_slices(num_blocks, n_in, n_out, mask_type=MASK_EXCLUSIVE):
   """Generate the slices for building an autoregressive mask."""
@@ -340,7 +340,7 @@ def _gen_slices(num_blocks, n_in, n_out, mask_type=MASK_EXCLUSIVE):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _gen_mask(num_blocks,
               n_in,
@@ -362,7 +362,7 @@ def _gen_mask(num_blocks,
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def masked_dense(inputs,
                  units,
@@ -443,7 +443,7 @@ def masked_dense(inputs,
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def masked_autoregressive_default_template(
     hidden_layers,
@@ -566,7 +566,7 @@ def masked_autoregressive_default_template(
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _clip_by_value_preserve_grad(x, clip_value_min, clip_value_max, name=None):
   """Clips input while leaving gradient unaltered."""

@@ -102,7 +102,7 @@ class Independent(distribution_lib.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(
       self, distribution, reinterpreted_batch_ndims=None,
@@ -280,7 +280,7 @@ class Independent(distribution_lib.Distribution):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _kl_independent(a, b, name="kl_independent"):
   """Batched KL divergence `KL(a || b)` for Independent distributions.

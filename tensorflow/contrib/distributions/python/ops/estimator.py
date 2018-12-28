@@ -37,7 +37,7 @@ __all__ = [
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def estimator_head_distribution_regression(make_distribution_fn,
                                            label_dimension=1,
@@ -92,7 +92,7 @@ class _DistributionRegressionHead(_RegressionHead):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                make_distribution_fn,

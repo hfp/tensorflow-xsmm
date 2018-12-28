@@ -47,7 +47,7 @@ _kumaraswamy_sample_note = """Note: `x` must have dtype `self.dtype` and be in
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def _harmonic_number(x):
   """Compute the harmonic number from its analytic continuation.
@@ -138,7 +138,7 @@ class Kumaraswamy(transformed_distribution.TransformedDistribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                concentration1=None,

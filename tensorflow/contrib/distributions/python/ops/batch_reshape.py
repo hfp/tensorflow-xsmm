@@ -79,7 +79,7 @@ class BatchReshape(distribution_lib.Distribution):
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
-      "instead of `tf.contrib.distributions`.",
+      "instead of `tfp.distributions`.",
       warn_once=True)
   def __init__(self,
                distribution,
@@ -368,7 +368,7 @@ class BatchReshape(distribution_lib.Distribution):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def calculate_reshape(original_shape, new_shape, validate=False, name=None):
   """Calculates the reshaped dimensions (replacing up to one -1 in reshape)."""
@@ -408,7 +408,7 @@ def calculate_reshape(original_shape, new_shape, validate=False, name=None):
     "TensorFlow Probability "
     "(https://github.com/tensorflow/probability). You "
     "should update all references to use `tfp.distributions` "
-    "instead of `tf.contrib.distributions`.",
+    "instead of `tfp.distributions`.",
     warn_once=True)
 def validate_init_args_statically(distribution, batch_shape):
   """Helper to __init__ which makes or raises assertions."""
