@@ -19,10 +19,10 @@ py_library(
     deprecation = ("TensorFlow Distributions has migrated to " +
                    "TensorFlow Probability " +
                    "(https://github.com/tensorflow/probability). " +
-                   "Deprecated copies remaining in tf.contrib.distributions " +
+                   "Deprecated copies remaining in tfp.distributions " +
                    "are unmaintained, unsupported, and will be removed by " +
                    "late 2018. You should update all usage of " +
-                   "`tf.contrib.distributions` to `tfp.distributions`."),
+                   "`tfp.distributions` to `tfp.distributions`."),
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/python:array_ops",
@@ -51,10 +51,10 @@ py_library(
     deprecation = ("TensorFlow Distributions has migrated to " +
                    "TensorFlow Probability " +
                    "(https://github.com/tensorflow/probability). " +
-                   "Deprecated copies remaining in tf.contrib.distributions " +
+                   "Deprecated copies remaining in tfp.distributions " +
                    "are unmaintained, unsupported, and will be removed by " +
                    "late 2018. You should update all usage of " +
-                   "`tf.contrib.distributions` to `tfp.distributions`."),
+                   "`tfp.distributions` to `tfp.distributions`."),
     srcs_version = "PY2AND3",
     deps = [
         ":bijectors_py",
