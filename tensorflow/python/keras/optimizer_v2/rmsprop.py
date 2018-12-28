@@ -20,8 +20,10 @@ from __future__ import print_function
 from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.training import training_ops
+from tensorflow.python.util.tf_export import keras_export
 
 
+@keras_export("keras.optimizers.RMSprop", v1=[])
 class RMSprop(optimizer_v2.OptimizerV2):
   r"""Optimizer that implements the RMSprop algorithm.
 
@@ -88,10 +90,14 @@ class RMSprop(optimizer_v2.OptimizerV2):
         `epsilon` can each be a callable that takes no arguments and returns the
         actual value to use. This can be useful for changing these values across
         different invocations of optimizer functions. @end_compatibility
-      **kwargs: keyword arguments. Allowed to be {`decay`}
+      **kwargs: keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`,
+        `decay`}. `clipnorm` is clip gradients by norm; `clipvalue` is clip
+        gradients by value, `decay` is included for backward compatibility to
+        allow time inverse decay of learning rate. `lr` is included for backward
+        compatibility, recommended to use `learning_rate` instead.
     """
     super(RMSprop, self).__init__(name, **kwargs)
-    self._set_hyper("learning_rate", learning_rate)
+    self._set_hyper("learning_rate", kwargs.get("lr", learning_rate))
     self._set_hyper("decay", self._initial_decay)
     self._set_hyper("rho", rho)
 
@@ -103,13 +109,13 @@ class RMSprop(optimizer_v2.OptimizerV2):
     self._set_hyper("momentum", momentum)
 
     self._set_hyper("epsilon", epsilon)
-    self._centered = centered
+    self.centered = centered
 
   def _create_slots(self, var_list):
     for var in var_list:
       self.add_slot(var, "rms")
       self.add_slot(var, "momentum")
-      if self._centered:
+      if self.centered:
         self.add_slot(var, "mg")
 
   def _resource_apply_dense(self, grad, var):
@@ -120,7 +126,7 @@ class RMSprop(optimizer_v2.OptimizerV2):
     rho = self._get_hyper("rho", var_dtype)
     momentum = self._get_hyper("momentum", var_dtype)
     epsilon = self._get_hyper("epsilon", var_dtype)
-    if self._centered:
+    if self.centered:
       mg = self.get_slot(var, "mg")
       return training_ops.resource_apply_centered_rms_prop(
           var.handle,
@@ -153,7 +159,7 @@ class RMSprop(optimizer_v2.OptimizerV2):
     rho = self._get_hyper("rho", var_dtype)
     momentum = self._get_hyper("momentum", var_dtype)
     epsilon = self._get_hyper("epsilon", var_dtype)
-    if self._centered:
+    if self.centered:
       mg = self.get_slot(var, "mg")
       return training_ops.resource_sparse_apply_centered_rms_prop(
           var.handle,
@@ -188,7 +194,7 @@ class RMSprop(optimizer_v2.OptimizerV2):
         "rho": self._serialize_hyperparameter("rho"),
         "momentum": self._serialize_hyperparameter("momentum"),
         "epsilon": self._serialize_hyperparameter("epsilon"),
-        "centered": self._centered,
+        "centered": self.centered,
     })
     return config
 

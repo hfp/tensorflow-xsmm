@@ -125,6 +125,7 @@ static string GetSmName(std::pair<int, int> compute_capability) {
       {{6, 2}, 62},
       {{7, 0}, 70},
       {{7, 2}, 72},
+      {{7, 5}, 75},
   });
   int sm_version = 30;
   auto it = m->find(compute_capability);
@@ -199,8 +200,7 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
   }
   return absl::WrapUnique(target->createTargetMachine(
       triple.str(), llvm_ir::AsStringRef(cpu_name), "+ptx60", target_options,
-      Optional<Reloc::Model>(RelocModel), Optional<CodeModel::Model>(CMModel),
-      codegen_opt_level));
+      getRelocModel(), getCodeModel(), codegen_opt_level));
 }
 
 // Adds the standard LLVM optimization passes, based on the speed optimization

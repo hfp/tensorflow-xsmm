@@ -24,6 +24,7 @@ from tensorflow.core.framework import attr_value_pb2
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import iterator_ops
+from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
@@ -199,6 +200,13 @@ class FunctionalOpsTest(test.TestCase):
         lambda x: math_ops.multiply(math_ops.add(x, 3), 2), elems)
     self.assertAllEqual(
         np.array([(x + 3) * 2 for x in nums]), self.evaluate(r))
+
+  def testMapDtypeEager(self):
+    with context.eager_mode():
+      dtype = functional_ops.map_fn(lambda x: constant_op.constant(""),
+                                    constant_op.constant([]),
+                                    dtype=dtypes.string).dtype
+      self.assertEqual(dtype, dtypes.string)
 
   def testMapSparseTensor(self):
     with self.cached_session():
@@ -466,7 +474,7 @@ class FunctionalOpsTest(test.TestCase):
     loss = l0 + array_ops.stop_gradient(l1)
     grad = gradients_impl.gradients(ys=[loss], xs=[a, b])
     with self.test_session(use_gpu=True) as sess:
-      variables.global_variables_initializer().run()
+      self.evaluate(variables.global_variables_initializer())
       self.evaluate(grad)
 
   @test_util.run_in_graph_and_eager_modes
@@ -494,7 +502,7 @@ class FunctionalOpsTest(test.TestCase):
 
   @test_util.disable_control_flow_v2("b/119323354")
   @test_util.run_in_graph_and_eager_modes
-  @test_util.run_deprecated_v1
+  @test_util.run_v1_only("b/120545219")
   def testMapEmptyScalar(self):
     map_return = functional_ops.map_fn(lambda x: 1, constant_op.constant([]))
     self.assertAllEqual([0], map_return.get_shape().dims)
@@ -503,7 +511,7 @@ class FunctionalOpsTest(test.TestCase):
   # TODO(akshayka): this test fails in eager: the iterable is of length 0 so
   # so the body of the while loop never executes
   @test_util.disable_control_flow_v2("b/119323354")
-  @test_util.run_deprecated_v1
+  @test_util.run_v1_only("b/120545219")
   def testMapEmptyTensor(self):
     with self.cached_session():
       map_return = functional_ops.map_fn(lambda x: array_ops.zeros([3, 2]),
@@ -762,6 +770,26 @@ class FunctionalOpsTest(test.TestCase):
           self.assertAllEqual(Run(sess, 20.), 210.)
           self.assertAllEqual(Run(sess, 100.), 5050.)
 
+  # Like above, but using int32 in order to ensure that int32 tensors don't get
+  # copied to the GPU during the application of the while.
+  def testWhileInt32(self):
+    with ops.Graph().as_default() as g:
+
+      @function.Defun(*[dtypes.int32] * 2)
+      def Cond(n, unused_x):
+        return n > 0
+
+      @function.Defun(*[dtypes.int32] * 2)
+      def Body(n, x):
+        return n - 1, x + n
+
+      def Run(sess, n):
+        return sess.run(functional_ops.While([n, 0], Cond, Body))[1]
+
+      with self.session(graph=g, use_gpu=True) as sess:
+        self.assertAllEqual(Run(sess, 20), 210)
+        self.assertAllEqual(Run(sess, 100), 5050)
+
   @test_util.run_deprecated_v1
   def testWhileLowering(self):
 
@@ -797,7 +825,7 @@ class FunctionalOpsTest(test.TestCase):
     self.assertAllEqual(Run(100., False), 5050.)
     self.assertAllEqual(Run(100., True), 5050.)
 
-  @test_util.run_deprecated_v1
+  @test_util.run_v1_only("b/120545219")
   def testWhileError(self):
     for use_gpu in (True, False):
       with ops.Graph().as_default() as g:
@@ -1027,7 +1055,7 @@ class FunctionalOpsTest(test.TestCase):
   def testForMLPWhile(self):
     self._testForMLP(True)
 
-  @test_util.run_deprecated_v1
+  @test_util.run_v1_only("b/120545219")
   def testForError(self):
 
     @function.Defun(dtypes.int32, dtypes.float32)
@@ -1233,7 +1261,7 @@ class PartitionedCallTest(test.TestCase):
       self.assertAllEqual(expected, result)
 
   # Use an invalid executor name to test the plumbing of the executor_type attr.
-  @test_util.run_deprecated_v1
+  @test_util.run_v1_only("b/120545219")
   def testExecutorTypeAttrExecutorNotFound(self):
     @function.Defun(dtypes.int32)
     def AddFive(x):

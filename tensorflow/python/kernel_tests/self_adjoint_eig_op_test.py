@@ -22,6 +22,7 @@ import numpy as np
 
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes as dtypes_lib
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradient_checker_v2
 from tensorflow.python.ops import linalg_ops
@@ -39,6 +40,7 @@ def _AddTest(test_class, op_name, testcase_name, fn):
 
 class SelfAdjointEigTest(test.TestCase):
 
+  @test_util.run_deprecated_v1
   def testWrongDimensions(self):
     # The input to self_adjoint_eig should be a tensor of
     # at least rank 2.
@@ -49,6 +51,7 @@ class SelfAdjointEigTest(test.TestCase):
     with self.assertRaises(ValueError):
       linalg_ops.self_adjoint_eig(vector)
 
+  @test_util.run_deprecated_v1
   def testConcurrentExecutesWithoutError(self):
     all_ops = []
     with self.session(use_gpu=True) as sess:
@@ -161,7 +164,7 @@ def _GetSelfAdjointEigTest(dtype_, shape_, compute_v_):
             math_ops.matmul(tf_v, array_ops.matrix_diag(tf_e)),
             tf_v,
             adjoint_b=True)
-        self.assertAllClose(a_ev.eval(), a, atol=atol)
+        self.assertAllClose(self.evaluate(a_ev), a, atol=atol)
 
         # Compare to numpy.linalg.eigh.
         CompareEigenDecompositions(self, np_e, np_v, self.evaluate(tf_e),
@@ -169,7 +172,7 @@ def _GetSelfAdjointEigTest(dtype_, shape_, compute_v_):
       else:
         tf_e = linalg_ops.self_adjoint_eigvals(constant_op.constant(a))
         self.assertAllClose(
-            np.sort(np_e, -1), np.sort(tf_e.eval(), -1), atol=atol)
+            np.sort(np_e, -1), np.sort(self.evaluate(tf_e), -1), atol=atol)
 
   return Test
 

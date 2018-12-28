@@ -34,6 +34,7 @@ def pyx_library(
         deps = [],
         py_deps = [],
         srcs = [],
+        testonly = None,
         **kwargs):
     """Compiles a group of .pyx / .pxd / .py files.
 
@@ -75,6 +76,7 @@ def pyx_library(
             # Optionally use PYTHON_BIN_PATH on Linux platforms so that python 3
             # works. Windows has issues with cython_binary so skip PYTHON_BIN_PATH.
             cmd = "PYTHONHASHSEED=0 $(location @cython//:cython_binary) --cplus $(SRCS) --output-file $(OUTS)",
+            testonly = testonly,
             tools = ["@cython//:cython_binary"] + pxd_srcs,
         )
 
@@ -85,8 +87,9 @@ def pyx_library(
         native.cc_binary(
             name = shared_object_name,
             srcs = [stem + ".cpp"],
-            deps = deps + ["//third_party/python_runtime:headers"],
+            deps = deps + ["@org_tensorflow//third_party/python_runtime:headers"],
             linkshared = 1,
+            testonly = testonly,
         )
         shared_objects.append(shared_object_name)
 
@@ -97,6 +100,7 @@ def pyx_library(
         deps = py_deps,
         srcs_version = "PY2AND3",
         data = shared_objects,
+        testonly = testonly,
         **kwargs
     )
 
@@ -543,9 +547,6 @@ def tf_additional_proto_srcs():
 def tf_additional_human_readable_json_deps():
     return []
 
-def tf_additional_logger_deps():
-    return []
-
 def tf_additional_all_protos():
     return ["//tensorflow/core:protos_all"]
 
@@ -663,13 +664,14 @@ def tf_additional_cloud_op_deps():
         "//tensorflow:linux_s390x": [],
         "//tensorflow:windows": [],
         "//tensorflow:no_gcp_support": [],
+        "//tensorflow:api_version_2": [],
         "//conditions:default": [
             "//tensorflow/contrib/cloud:bigquery_reader_ops_op_lib",
             "//tensorflow/contrib/cloud:gcs_config_ops_op_lib",
         ],
     })
 
-# TODO(jart, jhseu): Delete when GCP is default on.
+# TODO(jhseu): Delete when GCP is default on.
 def tf_additional_cloud_kernel_deps():
     return select({
         "//tensorflow:android": [],
@@ -677,6 +679,7 @@ def tf_additional_cloud_kernel_deps():
         "//tensorflow:linux_s390x": [],
         "//tensorflow:windows": [],
         "//tensorflow:no_gcp_support": [],
+        "//tensorflow:api_version_2": [],
         "//conditions:default": [
             "//tensorflow/contrib/cloud/kernels:bigquery_reader_ops",
             "//tensorflow/contrib/cloud/kernels:gcs_config_ops",

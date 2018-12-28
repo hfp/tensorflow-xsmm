@@ -42,6 +42,7 @@ py_library(
         "datasets/reuters.py",
         "estimator/__init__.py",
         "keras_parameterized.py",
+        "ops.py",
         "preprocessing/__init__.py",
         "preprocessing/image.py",
         "preprocessing/sequence.py",
@@ -61,10 +62,13 @@ py_library(
         ":engine",
         ":layers",
         ":pil_for_keras",
+        "@keras_applications_archive//:keras_applications",
         "//tensorflow/python:training",
         "//tensorflow/python/keras/optimizer_v2",
+        # TODO(kathywu): move saving into engine after resolving circular
+        # dependencies between Keras and SavedModel
+        "//tensorflow/python/keras/saving",
         "//tensorflow/python/saved_model",
-        "@keras_applications_archive//:keras_applications",
     ],
 )
 
@@ -96,6 +100,7 @@ py_library(
         "//tensorflow/python:gradients",
         "//tensorflow/python:image_ops",
         "//tensorflow/python:init_ops",
+        "//tensorflow/python:init_ops_v2",
         "//tensorflow/python:logging_ops",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:metrics",
@@ -118,9 +123,6 @@ py_library(
 py_library(
     name = "engine",
     srcs = [
-        "activations.py",
-        "callbacks.py",
-        "constraints.py",
         "engine/__init__.py",
         "engine/base_layer.py",
         "engine/base_layer_utils.py",
@@ -136,12 +138,117 @@ py_library(
         "engine/training_eager.py",
         "engine/training_generator.py",
         "engine/training_utils.py",
-        "initializers.py",
-        "losses.py",
-        "metrics.py",
+        "metrics.py",  # Need base_layer
         "models.py",
+        "utils/metrics_utils.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":activations",
+        ":backend",
+        ":callbacks",
+        ":constraints",
+        ":engine_utils",
+        ":initializers",
+        ":losses",
+        ":optimizers",
+        ":regularizers",
+        "//tensorflow/python/data",
+        "//tensorflow/python/distribute:reduce_util",
+        "//tensorflow/python/training/checkpointable:data_structures",
+        "//tensorflow/tools/docs:doc_controls",
+        "@six_archive//:six",
+    ],
+)
+
+py_library(
+    name = "activations",
+    srcs = [
+        "activations.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "callbacks",
+    srcs = [
+        "callbacks.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "constraints",
+    srcs = [
+        "constraints.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "initializers",
+    srcs = [
+        "initializers.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "losses",
+    srcs = [
+        "losses.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "optimizers",
+    srcs = [
         "optimizers.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+        "//tensorflow/python/keras/optimizer_v2",
+    ],
+)
+
+py_library(
+    name = "regularizers",
+    srcs = [
         "regularizers.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":backend",
+        ":engine_utils",
+    ],
+)
+
+py_library(
+    name = "engine_utils",
+    srcs = [
         "utils/data_utils.py",
         "utils/io_utils.py",
         "utils/losses_utils.py",
@@ -149,12 +256,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":backend",
-        "//tensorflow/python/data",
-        "//tensorflow/python/distribute:reduce_util",
-        "//tensorflow/python/keras/optimizer_v2",
-        "//tensorflow/python/training/checkpointable:data_structures",
-        "//tensorflow/tools/docs:doc_controls",
-        "@six_archive//:six",
     ],
 )
 
@@ -301,15 +402,23 @@ py_test(
 )
 
 py_test(
+    name = "metrics_functional_test",
+    size = "medium",
+    srcs = ["metrics_functional_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":keras",
+        "//tensorflow/python:client_testlib",
+        "//third_party/py/numpy",
+    ],
+)
+
+py_test(
     name = "metrics_test",
     size = "medium",
     srcs = ["metrics_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
-    tags = [
-        "manual",
-        "no_oss",
-        "notap",
-    ],
     deps = [
         ":keras",
         "//tensorflow/python:client_testlib",
@@ -361,7 +470,7 @@ py_test(
     name = "convolutional_test",
     size = "large",
     srcs = ["layers/convolutional_test.py"],
-    shard_count = 4,
+    shard_count = 11,
     srcs_version = "PY2AND3",
     deps = [
         ":keras",
@@ -373,7 +482,7 @@ py_test(
 
 cuda_py_test(
     name = "cudnn_recurrent_test",
-    size = "large",
+    size = "medium",
     srcs = ["layers/cudnn_recurrent_test.py"],
     additional_deps = [
         ":keras",
@@ -381,7 +490,7 @@ cuda_py_test(
         "//third_party/py/numpy",
         "//tensorflow/python:client_testlib",
     ],
-    shard_count = 2,
+    shard_count = 4,
     tags = ["no_windows_gpu"],
 )
 
@@ -401,7 +510,7 @@ py_test(
     name = "core_test",
     size = "medium",
     srcs = ["layers/core_test.py"],
-    shard_count = 2,
+    shard_count = 3,
     srcs_version = "PY2AND3",
     deps = [
         ":keras",
@@ -466,6 +575,7 @@ py_test(
     name = "normalization_test",
     size = "medium",
     srcs = ["layers/normalization_test.py"],
+    shard_count = 3,
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [
@@ -480,6 +590,7 @@ py_test(
     name = "simplernn_test",
     size = "medium",
     srcs = ["layers/simplernn_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [
@@ -494,6 +605,7 @@ py_test(
     name = "gru_test",
     size = "large",
     srcs = ["layers/gru_test.py"],
+    shard_count = 2,
     srcs_version = "PY2AND3",
     tags = ["notsan"],  # http://b/62136390
     deps = [
@@ -524,8 +636,9 @@ py_test(
 
 py_test(
     name = "recurrent_test",
-    size = "large",
+    size = "medium",
     srcs = ["layers/recurrent_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
         ":keras",
@@ -545,7 +658,20 @@ cuda_py_test(
         "//third_party/py/numpy",
         "//tensorflow/python:client_testlib",
     ],
-    shard_count = 4,
+    shard_count = 8,
+)
+
+cuda_py_test(
+    name = "unified_gru_test",
+    size = "medium",
+    srcs = ["layers/unified_gru_test.py"],
+    additional_deps = [
+        ":keras",
+        "@absl_py//absl/testing:parameterized",
+        "//third_party/py/numpy",
+        "//tensorflow/python:client_testlib",
+    ],
+    shard_count = 6,
 )
 
 py_test(
@@ -759,17 +885,27 @@ py_test(
 )
 
 py_test(
+    name = "correctness_test",
+    size = "medium",
+    srcs = ["engine/correctness_test.py"],
+    shard_count = 2,
+    srcs_version = "PY2AND3",
+    tags = ["notsan"],
+    deps = [
+        ":keras",
+        "//tensorflow/python:client_testlib",
+        "//third_party/py/numpy",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_test(
     name = "training_test",
     size = "medium",
     srcs = ["engine/training_test.py"],
     shard_count = 16,
     srcs_version = "PY2AND3",
-    tags = [
-        "manual",  # TODO(b/120560388)
-        "no_oss",  # TODO(b/120560388)
-        "notap",  # TODO(b/120560388)
-        "notsan",
-    ],
+    tags = ["notsan"],
     deps = [
         ":keras",
         "//tensorflow/python:client_testlib",
@@ -794,7 +930,7 @@ py_test(
 
 py_test(
     name = "training_generator_test",
-    size = "enormous",
+    size = "large",
     srcs = ["engine/training_generator_test.py"],
     shard_count = 3,
     srcs_version = "PY2AND3",
@@ -857,7 +993,7 @@ py_test(
     name = "model_subclassing_test",
     size = "medium",
     srcs = ["model_subclassing_test.py"],
-    shard_count = 2,
+    shard_count = 4,
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [
@@ -870,7 +1006,7 @@ py_test(
 
 py_test(
     name = "topology_test",
-    size = "small",
+    size = "medium",
     srcs = ["engine/topology_test.py"],
     srcs_version = "PY2AND3",
     tags = [

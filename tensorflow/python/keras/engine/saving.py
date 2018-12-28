@@ -31,7 +31,7 @@ from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.keras.utils.io_utils import ask_to_proceed_with_overwrite
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import serialization
-from tensorflow.python.util.tf_export import tf_export
+from tensorflow.python.util.tf_export import keras_export
 
 # pylint: disable=g-import-not-at-top
 try:
@@ -47,7 +47,7 @@ except ImportError:
 # pylint: enable=g-import-not-at-top
 
 
-@tf_export('keras.models.save_model')
+@keras_export('keras.models.save_model')
 def save_model(model, filepath, overwrite=True, include_optimizer=True):
   """Saves a model to a HDF5 file.
 
@@ -161,7 +161,7 @@ def save_model(model, filepath, overwrite=True, include_optimizer=True):
       f.close()
 
 
-@tf_export('keras.models.load_model')
+@keras_export('keras.models.load_model')
 def load_model(filepath, custom_objects=None, compile=True):  # pylint: disable=redefined-builtin
   """Loads a model saved via `save_model`.
 
@@ -300,7 +300,7 @@ def load_model(filepath, custom_objects=None, compile=True):  # pylint: disable=
   return model
 
 
-@tf_export('keras.models.model_from_config')
+@keras_export('keras.models.model_from_config')
 def model_from_config(config, custom_objects=None):
   """Instantiates a Keras model from its config.
 
@@ -324,7 +324,7 @@ def model_from_config(config, custom_objects=None):
   return deserialize(config, custom_objects=custom_objects)
 
 
-@tf_export('keras.models.model_from_yaml')
+@keras_export('keras.models.model_from_yaml')
 def model_from_yaml(yaml_string, custom_objects=None):
   """Parses a yaml model configuration file and returns a model instance.
 
@@ -347,7 +347,7 @@ def model_from_yaml(yaml_string, custom_objects=None):
   return deserialize(config, custom_objects=custom_objects)
 
 
-@tf_export('keras.models.model_from_json')
+@keras_export('keras.models.model_from_json')
 def model_from_json(json_string, custom_objects=None):
   """Parses a JSON model configuration file and returns a model instance.
 
@@ -551,66 +551,8 @@ def preprocess_weights_for_loading(layer,
       if layer.__class__.__name__ == 'ConvLSTM2D':
         weights[1] = np.transpose(weights[1], (3, 2, 0, 1))
 
-  weights = _convert_unified_lstm_weights(layer, weights)
-
   # convert CuDNN layers
   return _convert_rnn_weights(layer, weights)
-
-
-def _convert_unified_lstm_weights(layer, weights):
-  """Converts weights for Unified LSTM layer.
-
-  The input weights suppose to have 2, 3 or 4 items.
-  1. kernel. (i, f, c, o gates concat among axis 1)
-  2. recurrent_kernel. (i, f, c, o concat among axis 1)
-  3. recurrent_bias. (optional, only available when use bias)
-  4. input_bias (optional, only available when use bias and cudnn).
-  Kernel and recurrent_kernel does not need any conversion. During load(),
-  since the layer could be built with the parameter that does not support the
-  defun approach, it is possible that cudnn_bias variable is not created, or
-  even created but not used during actual run. Because of that, we sum up the
-  value of two biases, and give it to recurrent_bias only. Mathematically, the
-  LSTM is calculated as following formula:
-
-    i_t = sigmoid(w_i * x_t + r_i * h_(t-1) + b_wi + b_ri)
-    f_t = sigmoid(w_f * x_t + r_f * h_(t-1) + b_wf + b_rf)
-    o_t = sigmoid(w_o * x_t + r_o * h_(t-1) + b_wo + b_ro)
-    c'_t = tanh(w_c * x_t + r_c * h_(t-1) + b_wc + b_rc)
-    c_t = f_t . c_(t-1) + i_t . c'_t
-    h_t = o_t . tanh(c_t)
-
-  Note that b_w{x} is the input_bias, and b_r{x} is the recurrent_bias.
-  Since it is a linear add, it is fine to give b_r{x} 100% and b_w{x} 0%, as
-  long as the sum are the same.
-
-  Args:
-    layer: The keras layer that will be loaded with weights.
-    weights: the list of numpy arrays which hold the weights to be loaded.
-
-  Returns:
-    weights: the processed list of numpy arrays.
-  """
-  if layer.__class__.__name__ == 'UnifiedLSTM':
-    if len(weights) not in [3, 4]:
-      # Only handles the bias conversion in this function, in the case when
-      # bias is not used or weights in unexpected length, do nothing and return.
-      return weights
-
-    if len(weights) == 3:
-      recurrent_bias = weights[2]
-    else:
-      # Add all the bias value to recurrent_bias
-      recurrent_bias = weights[2] + weights[3]
-
-    if len(layer.weights) == 3:
-      weights = weights[:2] + [recurrent_bias]
-    elif len(layer.weights) == 4:
-      # Create a zero filled input_bias, since all the weights have given
-      # to recurrent bias.
-      input_bias = np.zeros_like(recurrent_bias)
-      weights = weights[:2] + [recurrent_bias, input_bias]
-
-  return weights
 
 
 def _convert_rnn_weights(layer, weights):

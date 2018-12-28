@@ -18,6 +18,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
+
 from tensorflow.tools.compatibility import ast_edits
 from tensorflow.tools.compatibility import renames_v2
 from tensorflow.tools.compatibility import reorders_v2
@@ -36,6 +38,18 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.argmax": {
             "dimension": "axis",
         },
+        "tf.arg_min": {
+            "dimension": "axis",
+        },
+        "tf.arg_max": {
+            "dimension": "axis",
+        },
+        "tf.math.argmin": {
+            "dimension": "axis",
+        },
+        "tf.math.argmax": {
+            "dimension": "axis",
+        },
         "tf.image.crop_and_resize": {
             "box_ind": "box_indices",
         },
@@ -51,6 +65,12 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.batch_to_space": {
             "block_size": "block_shape",
         },
+        "tf.space_to_batch": {
+            "block_size": "block_shape",
+        },
+        "tf.nn.space_to_batch": {
+            "block_size": "block_shape",
+        },
         "tf.constant": {
             "verify_shape": "verify_shape_is_now_always_true",
         },
@@ -62,6 +82,15 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         },
         "tf.linalg.l2_normalize": {
             "dim": "axis",
+        },
+        "tf.linalg.norm": {
+            "keep_dims": "keepdims",
+        },
+        "tf.norm": {
+            "keep_dims": "keepdims",
+        },
+        "tf.load_file_system_library": {
+            "library_filename": "library_location",
         },
         "tf.math.count_nonzero": {
             "input_tensor": "input",
@@ -96,6 +125,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.nn.separable_conv2d": {
             "rate": "dilations"
         },
+        "tf.nn.depthwise_conv2d": {
+            "rate": "dilations"
+        },
         "tf.nn.softmax": {
             "dim": "axis"
         },
@@ -114,14 +146,35 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         },
         "tf.sparse.concat": {
             "concat_dim": "axis",
+            "expand_nonconcat_dim": "expand_nonconcat_dims",
         },
         "tf.sparse_concat": {
             "concat_dim": "axis",
+            "expand_nonconcat_dim": "expand_nonconcat_dims",
         },
         "tf.sparse.split": {
             "split_dim": "axis",
         },
-        "tf.max_pool_with_argmax": {
+        "tf.sparse_split": {
+            "split_dim": "axis",
+        },
+        "tf.sparse.reduce_max": {
+            "reduction_axes": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.sparse_reduce_max": {
+            "reduction_axes": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.sparse.reduce_sum": {
+            "reduction_axes": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.sparse_reduce_sum": {
+            "reduction_axes": "axis",
+            "keep_dims": "keepdims",
+        },
+        "tf.nn.max_pool_with_argmax": {
             "Targmax": "output_dtype",
         },
         "tf.multinomial": {
@@ -129,6 +182,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         },
         "tf.random.multinomial": {
             "output_dtype": "dtype",
+        },
+        "tf.reverse_sequence": {
+            "seq_dim": "seq_axis",
+            "batch_dim": "batch_axis",
         },
         "tf.nn.batch_norm_with_global_normalization": {
             "t": "input",
@@ -147,6 +204,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         },
         "tf.ones_like": {
             "tensor": "input",
+        },
+        "tf.nn.conv2d_transpose": {
+            "value": "input",
+            "filter": "filters",
         },
         "tf.nn.conv3d_transpose": {
             "value": "input",
@@ -284,6 +345,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.squeeze": {
             "squeeze_dims": "axis",
         },
+        "tf.nn.weighted_moments": {
+            "keep_dims": "keepdims"
+        },
     }
 
     # pylint: disable=line-too-long
@@ -294,6 +358,14 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     self.manual_symbol_renames = {
         "tf.batch_to_space_nd":
             "tf.batch_to_space",
+        "tf.batch_gather":
+            "tf.gather",
+        "tf.space_to_batch_nd":
+            "tf.space_to_batch",
+        "tf.nn.space_to_batch":
+            "tf.space_to_batch",
+        "tf.estimator.inputs":
+            "tf.compat.v1.estimator.inputs",
         "tf.extract_image_patches":
             "tf.image.extract_image_patches",
         "tf.gfile.Copy":
@@ -404,6 +476,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.data.experimental.unbatch",
         "tf.contrib.data.unique":
             "tf.data.experimental.unique",
+        "tf.contrib.rnn.RNNCell":
+            "tf.nn.rnn_cell.RNNCell",
+        "tf.contrib.rnn.LSTMStateTuple":
+            "tf.nn.rnn_cell.LSTMStateTuple",
         "tf.contrib.framework.sort":
             "tf.sort",
         "tf.contrib.framework.argsort":
@@ -420,8 +496,14 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.sparse.split",
         "tf.sparse_matmul":
             "tf.linalg.matmul",
+        "tf.sparse_reduce_sum":
+            "tf.sparse.reduce_sum",
+        "tf.sparse_reduce_max":
+            "tf.sparse.reduce_max",
         "tf.random.stateless_multinomial":
             "tf.random.stateless_categorical",
+        "tf.substr":
+            "tf.strings.substr",
         "tf.string_to_hash_bucket":
             "tf.strings.to_hash_bucket",
         "tf.string_to_number":
@@ -474,6 +556,22 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             "tf.argmax",
         "tf.arg_min":
             "tf.argmin",
+        # tf.nn.ctc_loss is still available in 2.0 but behavior
+        # changed significantly.
+        "tf.nn.ctc_loss":
+            "tf.compat.v1.nn.ctc_loss",
+        "tf.zeros_initializer":
+            "tf.compat.v1.initializers.zeros",
+        "tf.ones_initializer":
+            "tf.compat.v1.initializers.ones",
+        "tf.constant_initializer":
+            "tf.compat.v1.initializers.constant",
+        "tf.random_uniform_initializer":
+            "tf.compat.v1.initializers.random_uniform",
+        "tf.random_normal_initializer":
+            "tf.compat.v1.initializers.random_normal",
+        "tf.truncated_normal_initializer":
+            "tf.compat.v1.initializers.truncated_normal",
     }
     # pylint: enable=line-too-long
 
@@ -496,7 +594,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.io.serialize_many_sparse",
         "tf.argmax",
         "tf.argmin",
+        "tf.batch_gather",
         "tf.batch_to_space",
+        "tf.nn.space_to_batch",
         "tf.boolean_mask",
         "tf.convert_to_tensor",
         "tf.nn.moments",
@@ -522,10 +622,13 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.sparse.segment_sqrt_n",
         "tf.sparse.segment_sum",
         "tf.sparse_matmul",
+        "tf.sparse.reduce_max",
+        "tf.sparse_reduce_max",
         "tf.io.decode_csv",
-        "tf.strings.substr",
-        "tf.strings.reduce_join",
         "tf.strings.length",
+        "tf.strings.reduce_join",
+        "tf.strings.substr",
+        "tf.substr",
         "tf.transpose",
         "tf.tuple",
         "tf.parse_example",
@@ -558,6 +661,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "tf.nn.embedding_lookup_sparse",
         "tf.nn.in_top_k",
         "tf.nn.space_to_depth",
+        "tf.linalg.norm",
+        "tf.norm",
+        "tf.reverse_sequence",
+        "tf.sparse_split",
     }
 
     # Functions that were reordered should be changed to the new keyword args
@@ -567,6 +674,7 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
 
     # Specially handled functions.
     self.function_handle = {
+        "tf.batch_gather": self._batch_gather_handler,
         "tf.nn.dropout": self._dropout_handler,
         "tf.gradients": self._colocate_handler("tf.gradients"),
         "*.minimize": self._colocate_handler("Optimizer.minimize"),
@@ -615,6 +723,31 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
         "WARNING: `partition_strategy` has been removed from `%s` "
         " The 'div' strategy is used by default.")
 
+    initializers_no_dtype_comment = (
+        "WARNING: tf.initializers and tf.keras.initializers no longer have the "
+        "dtype argument in the constructor or partition_info argument in the "
+        "call method in TF 2.0 and after. The only API symbols are now "
+        "tf.keras.initializers.* or tf.initializers.*."
+        "\nThe calls have been converted to compat.v1 for safety (even though "
+        "they may already have been correct).")
+
+    uniform_unit_scaling_initializer_comment = (
+        "WARNING: uniform_unit_scaling_initializer has been removed. Please use"
+        " tf.initializers.variance_scaling instead with distribution=uniform "
+        "to get equivalent behaviour.")
+
+    metrics_comment = (
+        "WARNING: tf.metrics have been converted to object oriented versions in"
+        " TF 2.0 and after. The metric function calls have been converted to "
+        "compat.v1 for backward compatibility. Please update these calls to "
+        "the TF 2.0 versions.")
+
+    losses_comment = (
+        "WARNING: tf.losses have been converted to object oriented versions in"
+        " TF 2.0 and after. The loss function calls have been converted to "
+        "compat.v1 for backward compatibility. Please update these calls to "
+        "the TF 2.0 versions.")
+
     # Function warnings. <function name> placeholder inside warnings will be
     # replaced by function name.
     self.function_warnings = {
@@ -626,6 +759,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             assert_return_type_comment,
         "tf.assert_rank":
             assert_rank_comment,
+        "tf.cond":
+            "tf.cond no longer takes 'strict'. "
+            "Now 'strict' defaults to True."
+            "fn1/fn2 arguments are replaced by true_fn/false_fn.",
         "tf.debugging.assert_equal":
             assert_return_type_comment,
         "tf.debugging.assert_greater":
@@ -656,6 +793,10 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             assert_rank_comment,
         "tf.debugging.assert_rank_in":
             assert_rank_comment,
+        "tf.device":
+            "tf.device no longer takes function as an argument. "
+            "'devide_name_or_function' argument has been renamed to "
+            "'device_name'.",
         "tf.flags":
             "tf.flags has been removed, please use the argparse or absl"
             " module if you need command line parsing.",
@@ -693,6 +834,11 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             default_loss_reduction_changed,
         "tf.estimator.BaselineRegressor":
             default_loss_reduction_changed,
+        "tf.hessians":
+            "tf.hessians no longer takes "
+            "'colocate_gradients_with_ops' argument. Also, "
+            "arguments have been reordered so that 'name' is the "
+            "last argument.",
         "tf.nn.conv1d":
             "WARNING: use_cudnn_on_gpu argument has been removed and \"value\""
             " was renamed to \"input\"",
@@ -719,9 +865,203 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
             tf_01s_like_no_optimize_comment,
         "tf.nn.embedding_lookup":
             "WARNING: validate_indices argument has been removed.",
-        "tf.sparse.concat":
-            ("WARNING: expand_nonconcat_dim was renamed to "
-             "expand_nonconcat_dims."),
+        "tf.while_loop":
+            "tf.while_loop no longer takes 'return_same_structure' argument. "
+            "'return_same_structure' now defaults to True. Also, 'name'"
+            "argument is now the last argument.",
+        "tf.image.sample_distorted_bounding_box":
+            "tf.image.sample_distorted_bounding_box no longer takes 'seed2' "
+            "argument.",
+        "tf.nn.ctc_beam_search_decoder":
+            "tf.nn.ctc_beam_search_decoder no longer takes 'merge_repeated' "
+            "argument. 'merge_repeated' now defaults to False.",
+        "tf.nn.fractional_avg_pool":
+            "tf.nn.fractional_avg_pool no longer takes 'seed2' and "
+            "'deterministic' arguments. Now it takes a single 'seed' arg. If "
+            "'seed' is zero, the execution is random and deterministic "
+            "otherwise",
+        "tf.nn.fractional_max_pool":
+            "tf.nn.fractional_max_pool no longer takes 'seed2' and "
+            "'deterministic' arguments. Now it takes a single 'seed' arg. If "
+            "'seed' is zero, the execution is random and deterministic "
+            "otherwise",
+        "tf.nn.softmax_cross_entropy_with_logits":
+            "tf.nn.softmax_cross_entropy_with_logits behavior has changed. "
+            "'labels' needs to be wrapped with tf.stop_gradient to keep the "
+            "old behavior. Also, 'dim' argument has been renamed to 'axis'.",
+        "tf.test.assert_equal_graph_def":
+            "tf.assert_equal_graph_def no longer takes 'checkpoint_v2' "
+            "argument. 'checkpoint_v2' now defaults to True.",
+        "tf.keras.initializers.Zeros":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.zeros":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.Ones":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.ones":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.Constant":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.constant":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.VarianceScaling":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.Orthogonal":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.orthogonal":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.Identity":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.identity":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.glorot_uniform":
+            initializers_no_dtype_comment,
+        "tf.keras.initializers.glorot_normal":
+            initializers_no_dtype_comment,
+        "tf.initializers.zeros":
+            initializers_no_dtype_comment,
+        "tf.zeros_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.ones":
+            initializers_no_dtype_comment,
+        "tf.ones_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.constant":
+            initializers_no_dtype_comment,
+        "tf.constant_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.random_uniform":
+            initializers_no_dtype_comment,
+        "tf.random_uniform_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.random_normal":
+            initializers_no_dtype_comment,
+        "tf.random_normal_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.truncated_normal":
+            initializers_no_dtype_comment,
+        "tf.truncated_normal_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.variance_scaling":
+            initializers_no_dtype_comment,
+        "tf.variance_scaling_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.orthogonal":
+            initializers_no_dtype_comment,
+        "tf.orthogonal_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.identity":
+            initializers_no_dtype_comment,
+        "tf.glorot_uniform_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.glorot_uniform":
+            initializers_no_dtype_comment,
+        "tf.glorot_normal_initializer":
+            initializers_no_dtype_comment,
+        "tf.initializers.glorot_normal":
+            initializers_no_dtype_comment,
+        "tf.initializers.uniform_unit_scaling":
+            uniform_unit_scaling_initializer_comment,
+        "tf.uniform_unit_scaling_initializer":
+            uniform_unit_scaling_initializer_comment,
+        "tf.losses.absolute_difference":
+            losses_comment,
+        "tf.losses.add_loss":
+            losses_comment,
+        "tf.losses.compute_weighted_loss":
+            losses_comment,
+        "tf.losses.cosine_distance":
+            losses_comment,
+        "tf.losses.get_losses":
+            losses_comment,
+        "tf.losses.get_regularization_loss":
+            losses_comment,
+        "tf.losses.get_regularization_losses":
+            losses_comment,
+        "tf.losses.get_total_loss":
+            losses_comment,
+        "tf.losses.hinge_loss":
+            losses_comment,
+        "tf.losses.huber_loss":
+            losses_comment,
+        "tf.losses.log_loss":
+            losses_comment,
+        "tf.losses.mean_pairwise_squared_error":
+            losses_comment,
+        "tf.losses.mean_squared_error":
+            losses_comment,
+        "tf.losses.sigmoid_cross_entropy":
+            losses_comment,
+        "tf.losses.softmax_cross_entropy":
+            losses_comment,
+        "tf.losses.sparse_softmax_cross_entropy":
+            losses_comment,
+        "tf.metrics.accuracy":
+            metrics_comment,
+        "tf.metrics.auc":
+            metrics_comment,
+        "tf.metrics.average_precision_at_k":
+            metrics_comment,
+        "tf.metrics.false_negatives":
+            metrics_comment,
+        "tf.metrics.false_negatives_at_thresholds":
+            metrics_comment,
+        "tf.metrics.false_positives":
+            metrics_comment,
+        "tf.metrics.false_positives_at_thresholds":
+            metrics_comment,
+        "tf.metrics.mean":
+            metrics_comment,
+        "tf.metrics.mean_absolute_error":
+            metrics_comment,
+        "tf.metrics.mean_cosine_distance":
+            metrics_comment,
+        "tf.metrics.mean_iou":
+            metrics_comment,
+        "tf.metrics.mean_per_class_accuracy":
+            metrics_comment,
+        "tf.metrics.mean_relative_error":
+            metrics_comment,
+        "tf.metrics.mean_squared_error":
+            metrics_comment,
+        "tf.metrics.mean_tensor":
+            metrics_comment,
+        "tf.metrics.percentage_below":
+            metrics_comment,
+        "tf.metrics.precision":
+            metrics_comment,
+        "tf.metrics.precision_at_k":
+            metrics_comment,
+        "tf.metrics.precision_at_thresholds":
+            metrics_comment,
+        "tf.metrics.precision_at_top_k":
+            metrics_comment,
+        "tf.metrics.recall":
+            metrics_comment,
+        "tf.metrics.recall_at_k":
+            metrics_comment,
+        "tf.metrics.recall_at_thresholds":
+            metrics_comment,
+        "tf.metrics.recall_at_top_k":
+            metrics_comment,
+        "tf.metrics.root_mean_squared_error":
+            metrics_comment,
+        "tf.metrics.sensitivity_at_specificity":
+            metrics_comment,
+        "tf.metrics.sparse_average_precision_at_k":
+            metrics_comment,
+        "tf.metrics.sparse_precision_at_k":
+            metrics_comment,
+        "tf.metrics.specificity_at_sensitivity":
+            metrics_comment,
+        "tf.metrics.true_negatives":
+            metrics_comment,
+        "tf.metrics.true_negatives_at_thresholds":
+            metrics_comment,
+        "tf.metrics.true_positives":
+            metrics_comment,
+        "tf.metrics.true_positives_at_thresholds":
+            metrics_comment,
     }
 
     self.symbol_renames = {
@@ -767,7 +1107,8 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
     }
 
   @staticmethod
-  def _dropout_handler(file_edit_recorder, node):
+  def _dropout_handler(file_edit_recorder, node, lines):
+    del lines
     if len(node.args) < 2:
       comment = ("ERROR: tf.nn.dropout did not take arguments, so automatic "
                  "transformation was disabled. tf.nn.dropout has changed "
@@ -791,7 +1132,9 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
 
   @staticmethod
   def _colocate_handler(name):
-    def _helper(file_edit_recorder, node):
+    def _helper(file_edit_recorder, node, lines):
+      """Handler for updating colocate arguments."""
+      del lines
       for keyword in node.keywords:
         if keyword.arg == "colocate_gradients_with_ops":
           # TODO(jhseu): Since ast_edit.py does string replacement, there's no
@@ -808,3 +1151,24 @@ class TFAPIChangeSpec(ast_edits.APIChangeSpec):
               "",
               error="{} requires manual check.".format(name))
     return _helper
+
+  @staticmethod
+  def _batch_gather_handler(file_edit_recorder, node, lines):
+    lineno = node.lineno
+    column = node.col_offset
+
+    # Find the position to add the batch_dims argument.  We add it as the
+    # first argument, since that's easiest.  This is safe because we included
+    # batch_gather in self.reordered_function_names, so it will have all
+    # of its arguments changed to keyword arguments.
+    m = re.match(r"tf\s*\.\s*batch_gather\s*\(", lines[lineno - 1][column:])
+    if m is not None:
+      file_edit_recorder.add(
+          "Added keyword argument 'batch_dims=-1' to 'tf.batch_gather'",
+          lineno, column + m.end(), "", "batch_dims=-1, ")
+    else:
+      file_edit_recorder.add(
+          "Unable to add keyword argument 'batch_dims=-1' to 'tf.batch_gather'",
+          lineno, column, "", "",
+          error="Unable to add keyword argument batch_dims=-1 to "
+          "tf.batch_gather; please add it manually.")

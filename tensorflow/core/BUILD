@@ -49,7 +49,7 @@
 # filegroup ":android_proto_srcs" - Protos
 # filegroup ":android_srcs" - Core sources
 # cc_library ":android_tensorflow_lib" - Native library
-# cc_library ":android_tensorflow_lib_selective_registration" - Native library
+# cc_library ":android_tensorflow_lib_lite" - Native library, without ops,
 #   supporting SELECTIVE_REGISTRATION feature.
 # portable_proto_library ":android_proto_lib" (Google-internal)
 #
@@ -113,7 +113,6 @@ load(
     "tf_additional_device_tracer_test_flags",
     "tf_additional_gdr_lib_defines",
     "tf_additional_human_readable_json_deps",
-    "tf_additional_logger_deps",
     "tf_additional_lib_defines",
     "tf_additional_lib_deps",
     "tf_additional_lib_hdrs",
@@ -447,14 +446,14 @@ cc_library(
 
 cc_library(
     name = "logger",
-    srcs = tf_platform_srcs(["logger.cc"]),
-    hdrs = ["platform/logger.h"] + tf_platform_hdrs(["logger.h"]),
+    srcs = ["platform/logger.cc"],
+    hdrs = ["platform/logger.h"],
     copts = tf_copts(),
     visibility = ["//visibility:public"],
     deps = [
-        ":lib",
-        ":lib_internal",
-    ] + tf_additional_logger_deps(),
+        ":lib_proto_parsing",
+        "@protobuf_archive//:protobuf",
+    ],
 )
 
 filegroup(
@@ -1611,6 +1610,9 @@ filegroup(
             "**/*main.cc",
             "debug/**/*",
             "framework/op_gen_*",
+            "framework/node_def_util.*",
+            "framework/op_kernel.*",
+            "framework/dataset.*",
             "lib/jpeg/**/*",
             "lib/png/**/*",
             "lib/gif/**/*",
@@ -1619,7 +1621,6 @@ filegroup(
             "util/reporter.*",
             "platform/**/cuda_libdevice_path.*",
             "platform/**/logger.cc",
-            "platform/**/logger.h",
             "platform/default/test_benchmark.*",
             "platform/cuda.h",
             "platform/google/**/*",
@@ -1654,6 +1655,9 @@ filegroup(
             "common_runtime/**/*.cc",
             "graph/**/*.h",
             "graph/**/*.cc",
+            "framework/node_def_util.*",
+            "framework/op_kernel.*",
+            "framework/dataset.*",
         ],
         exclude = [
             "**/*test.*",
@@ -1827,27 +1831,6 @@ cc_library(
         "@protobuf_archive//:protobuf",
     ],
     alwayslink = 1,
-)
-
-# Android library for use with the SELECTIVE_REGISTRATION feature.
-# Does not contain operators. In contrast to android_tensorflow_lib_lite,
-# this links in framework support for all types, relying on selective
-# registration of ops to prune code size.
-#
-# TODO(gonnet): Move all users of these aliases to the corresponding
-#     :android_tensorflow_lib_lite* targets and remove.
-alias(
-    name = "android_tensorflow_lib_selective_registration",
-    actual = ":android_tensorflow_lib_lite",
-    visibility = ["//visibility:public"],
-)
-
-# Android library for use with the SELECTIVE_REGISTRATION feature with
-# no proto_rtti.
-alias(
-    name = "android_tensorflow_lib_selective_registration_nortti",
-    actual = ":android_tensorflow_lib_lite_nortti",
-    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -2773,6 +2756,7 @@ cc_library(
 # in this library.
 GRAPH_HDRS = [
     "graph/algorithm.h",
+    "graph/collective_order.h",
     "graph/colors.h",
     "graph/control_flow.h",
     "graph/costmodel.h",
@@ -2799,6 +2783,7 @@ tf_cuda_library(
     name = "graph",
     srcs = [
         "graph/algorithm.cc",
+        "graph/collective_order.cc",
         "graph/colors.cc",
         "graph/control_flow.cc",
         "graph/costmodel.cc",
@@ -2830,12 +2815,16 @@ CORE_CPU_BASE_HDRS = GRAPH_HDRS + [
     "framework/versions.h",
     "common_runtime/process_function_library_runtime.h",
     "common_runtime/function.h",
+    "common_runtime/scoped_allocator.h",
+    "common_runtime/scoped_allocator_mgr.h",
 ]
 
 tf_cuda_library(
     name = "core_cpu_base",
     srcs = [
         "common_runtime/eval_const_tensor.cc",
+        "common_runtime/scoped_allocator.cc",
+        "common_runtime/scoped_allocator_mgr.cc",
         "common_runtime/shape_refiner.cc",
         "common_runtime/shape_refiner.h",
         "framework/versions.h",
@@ -2895,6 +2884,7 @@ CORE_CPU_LIB_HEADERS = CORE_CPU_BASE_HDRS + [
     "common_runtime/mkl_cpu_allocator.h",
     "common_runtime/optimization_registry.h",
     "common_runtime/pending_counts.h",
+    "common_runtime/partitioning_utils.h",
     "common_runtime/placer.h",
     "common_runtime/process_util.h",
     "common_runtime/profile_handler.h",
@@ -2902,8 +2892,6 @@ CORE_CPU_LIB_HEADERS = CORE_CPU_BASE_HDRS + [
     "common_runtime/rendezvous_mgr.h",
     "common_runtime/rendezvous_util.h",
     "common_runtime/ring_reducer.h",
-    "common_runtime/scoped_allocator.h",
-    "common_runtime/scoped_allocator_mgr.h",
     "common_runtime/session_factory.h",
     "common_runtime/single_threaded_cpu_device.h",
     "common_runtime/stats_publisher_interface.h",
@@ -2951,6 +2939,7 @@ tf_cuda_library(
         "common_runtime/mkl_cpu_allocator.cc",
         "common_runtime/optimization_registry.cc",
         "common_runtime/parallel_concat_optimizer.cc",
+        "common_runtime/partitioning_utils.cc",
         "common_runtime/placer.cc",
         "common_runtime/pool_allocator.cc",
         "common_runtime/process_function_library_runtime.cc",
@@ -2960,8 +2949,6 @@ tf_cuda_library(
         "common_runtime/rendezvous_mgr.cc",
         "common_runtime/rendezvous_util.cc",
         "common_runtime/ring_reducer.cc",
-        "common_runtime/scoped_allocator.cc",
-        "common_runtime/scoped_allocator_mgr.cc",
         "common_runtime/session.cc",
         "common_runtime/session_factory.cc",
         "common_runtime/session_options.cc",
@@ -2989,8 +2976,9 @@ tf_cuda_library(
         ":proto_text",
         ":protos_all_cc",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
         "//third_party/eigen3",
-        "//tensorflow/core/grappler:grappler_item",
+        "//tensorflow/core/grappler/utils:functions",
     ] + mkl_deps(),
     alwayslink = 1,
 )
@@ -3843,6 +3831,27 @@ tf_cc_test(
     ],
 )
 
+tf_cc_tests(
+    name = "collective_order_test",
+    size = "small",
+    srcs = [
+        "graph/collective_order_test.cc",
+    ],
+    deps = [
+        ":core",
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":framework",
+        ":framework_internal",
+        ":lib",
+        ":lib_internal",
+        ":ops",
+        ":protos_all_cc",
+        ":test",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 tf_cc_tests_gpu(
     name = "ring_reducer_test",
     size = "medium",
@@ -4059,20 +4068,6 @@ tf_cuda_cc_test(
     ],
 )
 
-tf_cc_test_gpu(
-    name = "cuda_libdevice_path_test",
-    size = "small",
-    srcs = ["platform/cuda_libdevice_path_test.cc"],
-    linkstatic = tf_kernel_tests_linkstatic(),
-    tags = tf_cuda_tests_tags(),
-    deps = [
-        ":cuda_libdevice_path",
-        ":lib",
-        ":test",
-        ":test_main",
-    ],
-)
-
 tf_cuda_only_cc_test(
     name = "util_cuda_kernel_helper_test",
     srcs = [
@@ -4206,7 +4201,7 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+tf_cuda_cc_test(
     name = "common_runtime_process_function_library_runtime_test",
     size = "small",
     srcs = ["common_runtime/process_function_library_runtime_test.cc"],
@@ -4215,6 +4210,7 @@ tf_cc_test(
         ":core_cpu",
         ":core_cpu_internal",
         ":framework",
+        ":framework_internal",
         ":lib",
         ":test",
         ":test_main",
@@ -4223,6 +4219,7 @@ tf_cc_test(
         "//tensorflow/core/kernels:cast_op",
         "//tensorflow/core/kernels:cwise_op",
         "//tensorflow/core/kernels:function_ops",
+        "//tensorflow/core/kernels:resource_variable_ops",
     ],
 )
 
@@ -4261,6 +4258,27 @@ tf_cc_test(
         ":lib",
         ":test",
         ":test_main",
+    ],
+)
+
+tf_cc_test(
+    name = "common_runtime_partitioning_utils_test",
+    size = "small",
+    srcs = ["common_runtime/partitioning_utils_test.cc"],
+    deps = [
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":framework",
+        ":lib",
+        ":ops",
+        ":test",
+        ":test_main",
+        ":testlib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:cc_ops_internal",
+        "//tensorflow/cc:function_ops",
+        "//tensorflow/core/kernels:function_ops",
+        "//tensorflow/core/kernels:identity_op",
     ],
 )
 
@@ -4928,7 +4946,7 @@ filegroup(
 
 cc_library(
     name = "cuda_libdevice_path",
-    srcs = ["platform/cuda_libdevice_path.cc"] + tf_additional_libdevice_srcs(),
+    srcs = tf_additional_libdevice_srcs(),
     hdrs = ["platform/cuda_libdevice_path.h"],
     copts = tf_copts(),
     data = tf_additional_libdevice_data(),
