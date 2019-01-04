@@ -1393,7 +1393,7 @@ void wrapper_libxsmm_spmdm_createSparseSlice_generic_thread(
     libxsmm_CSR_sparseslice* libxsmm_output_csr_a, int block_id, int tid,
     int nthreads) {
   return libxsmm_spmdm_createSparseSlice_bfloat16_thread(
-      handle, transA, reinterpret_cast<const uint16*>(A), libxsmm_output_csr_a,
+      handle, transA, reinterpret_cast<const libxsmm_bfloat16*>(A), libxsmm_output_csr_a,
       block_id, tid, nthreads);
 }
 
@@ -1403,9 +1403,9 @@ void wrapper_libxsmm_spmdm_compute_generic_thread(
     libxsmm_CSR_sparseslice* A_sparse, const bfloat16* B, char transC,
     const bfloat16* beta, float* C, int block_id, int tid, int nthreads) {
   return libxsmm_spmdm_compute_bfloat16_thread(
-      handle, transA, transB, reinterpret_cast<const uint16*>(alpha), A_sparse,
-      reinterpret_cast<const uint16*>(B), transC,
-      reinterpret_cast<const uint16*>(beta), C, block_id, tid, nthreads);
+      handle, transA, transB, reinterpret_cast<const libxsmm_bfloat16*>(alpha), A_sparse,
+      reinterpret_cast<const libxsmm_bfloat16*>(B), transC,
+      reinterpret_cast<const libxsmm_bfloat16*>(beta), C, block_id, tid, nthreads);
 }
 void wrapper_libxsmm_spmdm_compute_generic_thread(
     empty_type_wrapper<float>, const libxsmm_spmdm_handle* handle, char transA,
@@ -1632,15 +1632,15 @@ inline void SparseMatMul<TL, TR>::Compute(
                           SparseMatMulOp<TA, TB, LibxsmmSparseMatMul>);
 #endif
 
-REGISTER_SPARSE_MATMUL(bfloat16, bfloat16);
+REGISTER_SPARSE_MATMUL(float, bfloat16);
 REGISTER_SPARSE_MATMUL(bfloat16, float);
 
 #ifdef TENSORFLOW_USE_LIBXSMM
+REGISTER_SPARSE_MATMUL_LIBXSMM(bfloat16, bfloat16);
 REGISTER_SPARSE_MATMUL_LIBXSMM(float, float);
-REGISTER_SPARSE_MATMUL_LIBXSMM(float, bfloat16);
 #else
+REGISTER_SPARSE_MATMUL(bfloat16, bfloat16);
 REGISTER_SPARSE_MATMUL(float, float);
-REGISTER_SPARSE_MATMUL(float, bfloat16);
 #endif
 
 #undef REGISTER_SPARSE_MATMUL
