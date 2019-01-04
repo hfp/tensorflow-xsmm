@@ -1633,15 +1633,14 @@ inline void SparseMatMul<TL, TR>::Compute(
 #endif
 
 REGISTER_SPARSE_MATMUL(bfloat16, bfloat16);
-
-REGISTER_SPARSE_MATMUL(float, bfloat16);
-
 REGISTER_SPARSE_MATMUL(bfloat16, float);
 
 #ifdef TENSORFLOW_USE_LIBXSMM
 REGISTER_SPARSE_MATMUL_LIBXSMM(float, float);
+REGISTER_SPARSE_MATMUL_LIBXSMM(float, bfloat16);
 #else
 REGISTER_SPARSE_MATMUL(float, float);
+REGISTER_SPARSE_MATMUL(float, bfloat16);
 #endif
 
 #undef REGISTER_SPARSE_MATMUL
