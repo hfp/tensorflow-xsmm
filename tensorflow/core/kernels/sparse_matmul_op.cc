@@ -1424,13 +1424,6 @@ inline void LibxsmmSparseMatMul<TL, TR>::Compute(
     const typename LibxsmmSparseMatMul<TL, TR>::ConstMatrixMapR& right,
     bool transpose_left, const DeviceBase::CpuWorkerThreads* thread_pool,
     bool transpose_output, MatrixMap* output) {
-  if (false) {
-    // Not handled by libxsmm currently
-    SparseMatMul<TL, TR>::Compute(
-        nullptr /* Assumes no cached data for fallback */, left, right,
-        transpose_left, thread_pool, transpose_output, output);
-    return;
-  }
   const int num_threads = thread_pool->num_threads;
   const int left_dim0 = transpose_left ? left.dimension(1) : left.dimension(0);
   const int left_dim1 = transpose_left ? left.dimension(0) : left.dimension(1);
@@ -1441,6 +1434,7 @@ inline void LibxsmmSparseMatMul<TL, TR>::Compute(
            (transpose_output ? output->dimension(1) : output->dimension(0)));
   CHECK_EQ(right_dim1,
            (transpose_output ? output->dimension(0) : output->dimension(1)));
+#if 0
   if (left_dim0 < 32 || left_dim1 < 32 || right_dim1 < 32) {
     // Causes problems in libxsmm
     SparseMatMul<TL, TR>::Compute(
@@ -1448,6 +1442,7 @@ inline void LibxsmmSparseMatMul<TL, TR>::Compute(
         transpose_left, thread_pool, transpose_output, output);
     return;
   }
+#endif
   auto left_data = left.data();
   auto right_data = right.data();
   auto output_data = output->data();

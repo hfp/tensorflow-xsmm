@@ -159,10 +159,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     native.new_http_archive(
         name = "libxsmm_archive",
         build_file = clean_dep("//third_party:libxsmm.BUILD"),
-        sha256 = "6ec0fd4977152c87ea201edf773c1c983d72ced13bb0927924426a42e0f522b4",
-        strip_prefix = "libxsmm-f6676ee7db175bf60d9288b2022fc62ef7fb781b",
+        sha256 = "967e282426aaa5ed315f40d9bf20a7e964a1d16998e45ace60e8defb911738cd",
+        strip_prefix = "libxsmm-cac30fb1a90359a09cdcc8ae77ad12f09e940d8d",
         urls = [
-            "https://github.com/hfp/libxsmm/archive/f6676ee7db175bf60d9288b2022fc62ef7fb781b.zip",
+            "https://github.com/hfp/libxsmm/archive/cac30fb1a90359a09cdcc8ae77ad12f09e940d8d.zip",
         ],
     )
 
